@@ -1,0 +1,11 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/shared" },
+    { "path": "./packages/auth-core" },
+    { "path": "./packages/storage-core" },
+    { "path": "./packages/invite-core" },
+    { "path": "./packages/audit-core" },
+    { "path": "./packages/ui-core" }
+  ]
+}

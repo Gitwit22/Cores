@@ -1,0 +1,20 @@
+{
+  "name": "@nxtlvl/shared",
+  "version": "0.0.1",
+  "description": "Shared cross-core utility types for Nxt Lvl applications.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.json"
+  }
+}
