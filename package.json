@@ -9,6 +9,7 @@
   "scripts": {
     "build": "tsc --build",
     "build:auth-core": "tsc --build packages/auth-core",
+    "build:ticket-core": "tsc --build packages/ticket-core",
     "build:shared": "tsc --build packages/shared",
     "lint": "eslint packages --ext .ts,.tsx",
     "lint:fix": "eslint packages --ext .ts,.tsx --fix",

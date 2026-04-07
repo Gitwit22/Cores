@@ -17,6 +17,7 @@ It is not a single product or app. This repository holds modular core packages t
 - `packages/storage-core` is reserved for reusable storage abstractions.
 - `packages/invite-core` is reserved for invite issuance and acceptance flows.
 - `packages/audit-core` is reserved for audit event abstractions.
+- `packages/ticket-core` contains reusable request and case-management contracts.
 - `packages/ui-core` is reserved for thin, reusable UI-facing primitives.
 - `packages/shared` contains minimal cross-core utility types.
 - `docs` contains repository-level architecture notes and roadmaps.

@@ -6,6 +6,7 @@
     { "path": "./packages/storage-core" },
     { "path": "./packages/invite-core" },
     { "path": "./packages/audit-core" },
+    { "path": "./packages/ticket-core" },
     { "path": "./packages/ui-core" }
   ]
 }
