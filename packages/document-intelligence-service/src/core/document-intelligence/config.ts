@@ -13,7 +13,7 @@ const DEFAULT_LLAMA_PARSE_TIER: DocumentIntelligenceConfig['llamaParseTier'] = '
 const DEFAULT_LLAMA_PARSE_VERSION = 'latest';
 
 export function getDocumentIntelligenceConfig(): DocumentIntelligenceConfig {
-  const providerEnv = process.env.DOC_INTEL_PROVIDER?.trim();
+  const providerEnv = process.env.DEFAULT_DOCUMENT_PROVIDER?.trim();
   const provider = (providerEnv === 'llama-cloud' ? providerEnv : 'llama-cloud') satisfies DocumentIntelligenceProvider;
   const maxUploadEnv = Number(process.env.DOC_INTEL_MAX_UPLOAD_BYTES);
   const parseTierEnv = process.env.LLAMA_CLOUD_PARSE_TIER?.trim();

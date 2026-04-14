@@ -2,13 +2,13 @@ import type { Request, Response, NextFunction } from 'express';
 import { timingSafeEqual } from 'node:crypto';
 
 export function serviceAuth(req: Request, res: Response, next: NextFunction): void {
-  const expectedToken = process.env.SERVICE_AUTH_TOKEN?.trim();
+  const expectedToken = process.env.SERVICE_API_KEY?.trim();
 
   if (!expectedToken) {
     res.status(503).json({
       error: {
         code: 'SERVICE_AUTH_NOT_CONFIGURED',
-        message: 'SERVICE_AUTH_TOKEN is not configured.',
+        message: 'SERVICE_API_KEY is not configured.',
       },
     });
     return;
