@@ -1,0 +1,23 @@
+services:
+  - type: pserv
+    name: document-intelligence-service
+    env: node
+    rootDir: packages/document-intelligence-service
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"
+      - key: DOC_INTEL_PROVIDER
+        value: llama-cloud
+      - key: DOC_INTEL_MAX_UPLOAD_BYTES
+        value: "10485760"
+      - key: DOC_INTEL_TEMP_DIR
+        value: /tmp/document-intelligence-service
+      - key: SERVICE_AUTH_TOKEN
+        sync: false
+      - key: LLAMA_CLOUD_API_KEY
+        sync: false
