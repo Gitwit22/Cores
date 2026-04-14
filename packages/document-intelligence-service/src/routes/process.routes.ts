@@ -71,6 +71,7 @@ function parseCategories(input: unknown): string[] | undefined {
 processRouter.post('/process', upload.single('file'), async (req, res, next) => {
   try {
     validateUploadedFile(req.file);
+    const body = req.body as Record<string, unknown> | undefined;
     const result = await processDocument(
       {
         filePath: req.file.path,
@@ -78,11 +79,11 @@ processRouter.post('/process', upload.single('file'), async (req, res, next) => 
         mimeType: req.file.mimetype,
       },
       {
-        parse: asBoolean(req.body?.parse, true),
-        classify: asBoolean(req.body?.classify, false),
-        extract: asBoolean(req.body?.extract, false),
-        schema: parseSchema(req.body?.schema),
-        categories: parseCategories(req.body?.categories),
+        parse: asBoolean(body?.parse, true),
+        classify: asBoolean(body?.classify, false),
+        extract: asBoolean(body?.extract, false),
+        schema: parseSchema(body?.schema),
+        categories: parseCategories(body?.categories),
       },
     );
     res.json(result);

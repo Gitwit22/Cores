@@ -34,7 +34,8 @@ function parseSchema(input: unknown): unknown {
 extractRouter.post('/extract', upload.single('file'), async (req, res, next) => {
   try {
     validateUploadedFile(req.file);
-    const schema = parseSchema(req.body?.schema);
+    const body = req.body as Record<string, unknown> | undefined;
+    const schema = parseSchema(body?.schema);
     const result = await extractDocument(
       {
         filePath: req.file.path,

@@ -39,7 +39,8 @@ function parseCategories(input: unknown): string[] | undefined {
 classifyRouter.post('/classify', upload.single('file'), async (req, res, next) => {
   try {
     validateUploadedFile(req.file);
-    const categories = parseCategories(req.body?.categories);
+    const body = req.body as Record<string, unknown> | undefined;
+    const categories = parseCategories(body?.categories);
     const result = await classifyDocument(
       {
         filePath: req.file.path,
