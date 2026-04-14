@@ -137,6 +137,68 @@ export interface NormalizedExtractionResult {
 }
 
 // ---------------------------------------------------------------------------
+// Split
+// ---------------------------------------------------------------------------
+
+/**
+ * A single logical segment produced by a split operation.
+ */
+export interface DocumentSegment {
+  /** 0-based segment index */
+  index: number;
+  /** Plain-text content of this segment */
+  text: string;
+  /** Page range this segment covers, when available */
+  pages?: { start: number; end: number };
+  /** Arbitrary provider metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Normalized result of a document split operation.
+ */
+export interface NormalizedSplitResult {
+  provider: DocumentIntelligenceProvider;
+  status: 'complete' | 'failed' | 'skipped';
+  segments: DocumentSegment[];
+  /** Raw provider response for debugging / audit */
+  rawResult?: unknown;
+}
+
+// ---------------------------------------------------------------------------
+// Index
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalized result of a document index operation.
+ * Indexing stores parsed content in a retrieval-ready form (vector store, etc.).
+ */
+export interface NormalizedIndexResult {
+  provider: DocumentIntelligenceProvider;
+  status: 'complete' | 'failed' | 'skipped';
+  /** Provider-assigned ID for the indexed document */
+  indexId?: string | null;
+  /** Number of chunks / nodes indexed */
+  chunksIndexed?: number | null;
+  /** Raw provider response for debugging / audit */
+  rawResult?: unknown;
+}
+
+// ---------------------------------------------------------------------------
+// Capabilities matrix
+// ---------------------------------------------------------------------------
+
+/**
+ * Describes which capabilities a registered provider supports.
+ */
+export interface ProviderCapabilityMatrix {
+  provider: DocumentIntelligenceProvider;
+  capabilities: DocumentCapability[];
+  /** Whether the provider is currently available (key present, etc.) */
+  available: boolean;
+}
+
+// ---------------------------------------------------------------------------
 // Process (combined pipeline)
 // ---------------------------------------------------------------------------
 
@@ -150,6 +212,10 @@ export interface ProcessDocumentOptions {
   classify?: boolean;
   /** Run extract capability */
   extract?: boolean;
+  /** Run split capability */
+  split?: boolean;
+  /** Run index capability */
+  index?: boolean;
   /** Schema passed to the extract capability */
   extractionSchema?: unknown;
   /** Override the default provider for this call */
@@ -164,4 +230,6 @@ export interface ProcessDocumentResult {
   parse?: NormalizedParseResult;
   classify?: NormalizedClassificationResult;
   extract?: NormalizedExtractionResult;
+  split?: NormalizedSplitResult;
+  index?: NormalizedIndexResult;
 }
