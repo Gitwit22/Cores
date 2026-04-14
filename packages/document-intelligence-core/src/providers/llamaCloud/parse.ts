@@ -96,7 +96,7 @@ export async function llamaCloudParse(
     const result = await client.parsing.parse(
       {
         tier: providerConfig.parseTier,
-        version: providerConfig.parseVersion as Parameters<typeof client.parsing.parse>[0]['version'],
+        version: providerConfig.parseVersion as 'latest' | (string & Record<never, never>),
         upload_file: uploadable,
         expand: ['text', 'markdown'],
         ...(providerConfig.organizationId ? { organization_id: providerConfig.organizationId } : {}),

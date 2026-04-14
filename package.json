@@ -54,8 +54,5 @@
   },
   "engines": {
     "node": ">=18.0.0"
-  },
-  "dependencies": {
-    "@llamaindex/llama-cloud": "^2.3.0"
   }
 }

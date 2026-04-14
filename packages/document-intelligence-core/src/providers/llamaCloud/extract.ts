@@ -159,6 +159,17 @@ export async function llamaCloudExtract(
     }
   }
 
+  // ---- Guard: textToSearch must be non-empty at this point ---------------
+  if (!textToSearch || textToSearch.trim() === '') {
+    return normalizeExtractionResult({
+      schemaName: typedSchema.name,
+      fields: typedSchema.fields.map((f) => ({ key: f.key, value: null, confidence: 0 })),
+      confidence: 0,
+      rawResult: { reason: 'No text content available for extraction' },
+      status: 'failed',
+    });
+  }
+
   // ---- Extract fields ----------------------------------------------------
   const fields: ExtractedFieldValue[] = typedSchema.fields.map((fieldDef) => {
     const extracted = extractField(textToSearch, fieldDef);
