@@ -1,0 +1,25 @@
+{
+  "name": "@nxtlvl/document-intelligence-service",
+  "version": "0.0.1",
+  "description": "Standalone private backend service for shared document intelligence workflows.",
+  "main": "dist/server.js",
+  "types": "dist/server.d.ts",
+  "files": [
+    "dist",
+    ".env.example",
+    "render.yaml"
+  ],
+  "scripts": {
+    "build": "tsc --build tsconfig.json",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@llamaindex/llama-cloud": "^2.3.0",
+    "express": "^5.2.1",
+    "multer": "^2.1.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/multer": "^2.1.0"
+  }
+}

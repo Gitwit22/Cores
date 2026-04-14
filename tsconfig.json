@@ -7,6 +7,7 @@
     { "path": "./packages/invite-core" },
     { "path": "./packages/audit-core" },
     { "path": "./packages/ticket-core" },
-    { "path": "./packages/ui-core" }
+    { "path": "./packages/ui-core" },
+    { "path": "./packages/document-intelligence-service" }
   ]
 }
