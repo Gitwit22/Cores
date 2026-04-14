@@ -1,0 +1,28 @@
+{
+  "name": "@nxtlvl/document-intelligence-core",
+  "version": "0.0.1",
+  "description": "Provider-agnostic document intelligence core (parsing, classification, extraction) for Nxt Lvl apps.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.json"
+  },
+  "peerDependencies": {
+    "@llamaindex/llama-cloud": ">=0.0.1"
+  },
+  "peerDependenciesMeta": {
+    "@llamaindex/llama-cloud": {
+      "optional": true
+    }
+  }
+}
