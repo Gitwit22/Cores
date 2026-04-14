@@ -6,12 +6,13 @@ import {
   createMulterLimits,
   fileFilter,
   validateUploadedFile,
+  validateUploadedFileContent,
 } from '../utils/fileValidation.js';
-import { resolveStagedPath } from '../utils/tempFiles.js';
+import { stageUploadedBuffer } from '../utils/tempFiles.js';
 
 const processRouter = Router();
 const upload = multer({
-  dest: resolveStagedPath(''),
+  storage: multer.memoryStorage(),
   limits: createMulterLimits(),
   fileFilter,
 });
@@ -69,12 +70,15 @@ function parseCategories(input: unknown): string[] | undefined {
 }
 
 processRouter.post('/process', upload.single('file'), async (req, res, next) => {
+  let stagedFilePath: string | undefined;
   try {
     validateUploadedFile(req.file);
+    validateUploadedFileContent(req.file.buffer, req.file.mimetype);
+    stagedFilePath = await stageUploadedBuffer(req.file.buffer, req.file.mimetype);
     const body = req.body as Record<string, unknown> | undefined;
     const result = await processDocument(
       {
-        filePath: req.file.path,
+        filePath: stagedFilePath,
         fileName: req.file.originalname,
         mimeType: req.file.mimetype,
       },
@@ -90,7 +94,7 @@ processRouter.post('/process', upload.single('file'), async (req, res, next) => 
   } catch (error) {
     next(error);
   } finally {
-    await cleanupFile(req.file?.path);
+    await cleanupFile(stagedFilePath);
   }
 });
 

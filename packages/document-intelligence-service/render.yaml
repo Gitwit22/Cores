@@ -13,6 +13,10 @@ services:
         value: "3000"
       - key: DOC_INTEL_PROVIDER
         value: llama-cloud
+      - key: LLAMA_CLOUD_PARSE_TIER
+        value: cost_effective
+      - key: LLAMA_CLOUD_PARSE_VERSION
+        value: latest
       - key: DOC_INTEL_MAX_UPLOAD_BYTES
         value: "10485760"
       - key: DOC_INTEL_TEMP_DIR

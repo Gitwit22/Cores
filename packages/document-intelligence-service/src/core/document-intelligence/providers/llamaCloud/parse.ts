@@ -8,6 +8,7 @@ import {
 } from '../../errors.js';
 import { getLlamaCloudClient } from './client.js';
 import { normalizeParseResult } from '../../normalizers/parseNormalizer.js';
+import { getDocumentIntelligenceConfig } from '../../config.js';
 
 export async function llamaCloudParse(input: DocumentSourceInput): Promise<NormalizedParseResult> {
   if (!input.filePath || input.filePath.trim() === '') {
@@ -25,9 +26,10 @@ export async function llamaCloudParse(input: DocumentSourceInput): Promise<Norma
 
   try {
     const client = getLlamaCloudClient();
+    const config = getDocumentIntelligenceConfig();
     const raw = await client.parsing.parse({
-      tier: 'cost_effective',
-      version: 'latest',
+      tier: config.llamaParseTier,
+      version: config.llamaParseVersion as 'latest' | (string & Record<never, never>),
       upload_file: uploadable,
       expand: ['text', 'markdown'],
     });

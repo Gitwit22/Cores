@@ -45,3 +45,54 @@ export function validateUploadedFile(file?: Express.Multer.File): asserts file i
     throw new DocumentIntelligenceInvalidInputError(`Unsupported file type "${file.mimetype}".`);
   }
 }
+
+const MAGIC_NUMBERS: Record<string, readonly number[]> = {
+  'application/pdf': [0x25, 0x50, 0x44, 0x46],
+  'image/png': [0x89, 0x50, 0x4e, 0x47],
+  'image/jpeg': [0xff, 0xd8, 0xff],
+  'image/jpg': [0xff, 0xd8, 0xff],
+  'image/tiff': [0x49, 0x49, 0x2a, 0x00],
+  'image/bmp': [0x42, 0x4d],
+  'image/webp': [0x52, 0x49, 0x46, 0x46],
+};
+
+function startsWithBytes(buffer: Uint8Array, expected: readonly number[]): boolean {
+  if (buffer.length < expected.length) {
+    return false;
+  }
+  return expected.every((value, index) => buffer[index] === value);
+}
+
+export function validateUploadedFileContent(
+  fileBuffer: Buffer,
+  mimeType: string,
+): void {
+  if (!ALLOWED_MIME_TYPES.has(mimeType)) {
+    throw new DocumentIntelligenceInvalidInputError(`Unsupported file type "${mimeType}".`);
+  }
+
+  const signature = MAGIC_NUMBERS[mimeType];
+  if (!signature) {
+    return;
+  }
+  const sample = fileBuffer.subarray(0, 16);
+
+  if (mimeType === 'image/webp') {
+    if (
+      sample.length < 12
+      || !startsWithBytes(sample, signature)
+      || sample.toString('ascii', 8, 12) !== 'WEBP'
+    ) {
+      throw new DocumentIntelligenceInvalidInputError(
+        `File signature does not match MIME type "${mimeType}".`,
+      );
+    }
+    return;
+  }
+
+  if (!startsWithBytes(sample, signature)) {
+    throw new DocumentIntelligenceInvalidInputError(
+      `File signature does not match MIME type "${mimeType}".`,
+    );
+  }
+}

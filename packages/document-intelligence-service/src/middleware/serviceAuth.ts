@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
+import { timingSafeEqual } from 'node:crypto';
 
 export function serviceAuth(req: Request, res: Response, next: NextFunction): void {
   const expectedToken = process.env.SERVICE_AUTH_TOKEN?.trim();
@@ -25,7 +26,9 @@ export function serviceAuth(req: Request, res: Response, next: NextFunction): vo
   }
 
   const token = authHeader.slice('Bearer '.length).trim();
-  if (token !== expectedToken) {
+  const provided = Buffer.from(token);
+  const expected = Buffer.from(expectedToken);
+  if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) {
     res.status(403).json({
       error: {
         code: 'FORBIDDEN',
