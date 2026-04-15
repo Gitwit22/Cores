@@ -25,3 +25,5 @@ services:
         sync: false
       - key: LLAMA_CLOUD_API_KEY
         sync: false
+      - key: CORS_ALLOWED_ORIGINS
+        value: "https://sts.nltops.com"
