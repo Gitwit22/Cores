@@ -13,6 +13,7 @@
     "build:shared": "tsc --build packages/shared",
     "build:document-intelligence-core": "tsc --build packages/document-intelligence-core",
     "build:document-intelligence-service": "tsc --build packages/document-intelligence-service",
+    "start:document-intelligence-service": "node packages/document-intelligence-service/dist/server.js",
     "lint": "eslint packages --ext .ts,.tsx",
     "lint:fix": "eslint packages --ext .ts,.tsx --fix",
     "format": "prettier --write \"packages/**/*.{ts,tsx,json,md}\"",
