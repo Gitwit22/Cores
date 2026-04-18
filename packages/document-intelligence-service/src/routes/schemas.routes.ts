@@ -19,11 +19,14 @@ const SCHEMAS: Record<string, SchemaDefinition> = {
   'signin-sheet': {
     id: 'signin-sheet',
     name: 'Sign-In Sheet',
-    description: 'Attendee sign-in sheets, event rosters, or participation lists.',
+    description: 'Attendee sign-in sheets, event rosters, or participation lists. Headers are detected dynamically — extra columns are preserved in extraFields.',
     fields: [
       { key: 'fullName', description: 'Full name of the person', required: true },
+      { key: 'organization', description: 'Organization, company, or affiliation' },
       { key: 'phone', description: 'Phone number' },
       { key: 'email', description: 'Email address' },
+      { key: 'screening', description: 'Screening status or check' },
+      { key: 'shareInfo', description: 'Consent to share information' },
       { key: 'date', description: 'Date signed up or attended' },
       { key: 'comments', description: 'Any comments or notes' },
     ],
@@ -31,8 +34,9 @@ const SCHEMAS: Record<string, SchemaDefinition> = {
   'business-card': {
     id: 'business-card',
     name: 'Business Card',
-    description: 'Standard business cards with contact and company information.',
+    description: 'Business or visiting cards with contact and company information. Fields are detected dynamically from labels and content patterns.',
     fields: [
+      { key: 'fullName', description: 'Full name' },
       { key: 'firstName', description: 'First name', required: true },
       { key: 'lastName', description: 'Last name', required: true },
       { key: 'company', description: 'Company or organization name' },
@@ -41,18 +45,20 @@ const SCHEMAS: Record<string, SchemaDefinition> = {
       { key: 'email', description: 'Email address' },
       { key: 'website', description: 'Website URL' },
       { key: 'address', description: 'Mailing or street address' },
+      { key: 'social', description: 'Social media handle or profile' },
     ],
   },
   'contact-sheet': {
     id: 'contact-sheet',
     name: 'Contact Sheet',
-    description: 'Informal contact lists or directories not formatted as sign-in sheets.',
+    description: 'Informal contact lists or directories not formatted as sign-in sheets. Uses dynamic header detection.',
     fields: [
-      { key: 'name', description: 'Full name or contact name', required: true },
+      { key: 'fullName', description: 'Full name or contact name', required: true },
+      { key: 'organization', description: 'Organization or company' },
       { key: 'phone', description: 'Phone number' },
       { key: 'email', description: 'Email address' },
-      { key: 'organization', description: 'Organization or company' },
-      { key: 'notes', description: 'Any notes or additional info' },
+      { key: 'date', description: 'Date' },
+      { key: 'comments', description: 'Any notes or additional info' },
     ],
   },
 };
