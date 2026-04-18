@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { extractDocument } from '../core/document-intelligence/services/extractDocument.js';
+import { parseDocument } from '../core/document-intelligence/services/parseDocument.js';
 import { cleanupFile } from '../utils/cleanup.js';
 import {
   createMulterLimits,
@@ -10,6 +11,11 @@ import {
 } from '../utils/fileValidation.js';
 import { stageUploadedBuffer } from '../utils/tempFiles.js';
 import { normalizeContacts } from '../utils/contactUtils.js';
+import {
+  extractSigninRowsFromMarkdown,
+  extractSigninFromText,
+  extractBusinessCardFromMarkdown,
+} from '../utils/tableExtractor.js';
 
 const specializedRouter = Router();
 const upload = multer({
@@ -17,16 +23,6 @@ const upload = multer({
   limits: createMulterLimits(),
   fileFilter,
 });
-
-const SIGNIN_SCHEMA = {
-  fields: [
-    { key: 'fullName', description: 'Full name of the person' },
-    { key: 'phone', description: 'Phone number' },
-    { key: 'email', description: 'Email address' },
-    { key: 'date', description: 'Date signed up or attended' },
-    { key: 'comments', description: 'Any comments or notes' },
-  ],
-};
 
 const BUSINESS_CARD_SCHEMA = {
   fields: [
@@ -51,41 +47,124 @@ const CONTACT_SHEET_SCHEMA = {
   ],
 };
 
-specializedRouter.post('/process/signin-sheet', upload.single('file'), async (req, res, next) => {
+specializedRouter.post('/process/signin-sheet', upload.single('file'), async (req, res, next): Promise<void> => {
   let stagedFilePath: string | undefined;
   try {
     validateUploadedFile(req.file);
     validateUploadedFileContent(req.file.buffer, req.file.mimetype);
     stagedFilePath = await stageUploadedBuffer(req.file.buffer, req.file.mimetype);
-    const result = await extractDocument(
+
+    const includeDebug = (req.query['debug'] === 'true') || (req.body?.debug === true);
+
+    // Step 1: Parse — LlamaParse preserves table structure as markdown tables.
+    const parseResult = await parseDocument(
       { filePath: stagedFilePath, fileName: req.file.originalname, mimeType: req.file.mimetype },
-      SIGNIN_SCHEMA,
     );
-    const fieldMap = Object.fromEntries(result.fields.map((f) => [f.key, f.value ?? '']));
-    const row = {
+
+    if (parseResult.status !== 'complete') {
+      res.json({ status: 'failed', rows: [], structure: 'unstructured', detectedHeaders: [], headerMapping: {} });
+      return;
+    }
+
+    // Step 2: Try structured table extraction from the markdown output.
+    const tableResult = extractSigninRowsFromMarkdown(parseResult.markdown, includeDebug);
+
+    if (tableResult.structure === 'table' && tableResult.rows.length > 0) {
+      const rows = tableResult.rows.map((row) => ({
+        id: crypto.randomUUID(),
+        fullName: row.fullName,
+        organization: row.organization,
+        phone: row.phone,
+        email: row.email,
+        screening: row.screening,
+        shareInfo: row.shareInfo,
+        date: row.date,
+        comments: row.comments,
+        ...(includeDebug ? { _debug: row._debug } : {}),
+      }));
+      const normalized = normalizeContacts(rows);
+      res.json({
+        status: 'complete',
+        rows: normalized,
+        structure: tableResult.structure,
+        detectedHeaders: tableResult.detectedHeaders,
+        headerMapping: tableResult.headerMapping,
+      });
+      return;
+    }
+
+    // Step 3: Fallback — pattern-based extraction from plain text (single record).
+    console.warn('[signin-sheet] No table structure detected — falling back to text extraction.');
+    const textFields = extractSigninFromText(parseResult.text);
+    const fallbackRow = {
       id: crypto.randomUUID(),
-      fullName: fieldMap['fullName'] ?? '',
-      phone: fieldMap['phone'] ?? '',
-      email: fieldMap['email'] ?? '',
-      date: fieldMap['date'] ?? '',
-      comments: fieldMap['comments'] ?? '',
-      _confidence: result.confidence,
+      fullName: textFields.fullName ?? '',
+      organization: textFields.organization ?? '',
+      phone: textFields.phone ?? '',
+      email: textFields.email ?? '',
+      screening: '',
+      shareInfo: '',
+      date: textFields.date ?? '',
+      comments: '',
     };
-    const normalized = normalizeContacts([row]);
-    res.json({ status: result.status, rows: normalized, confidence: result.confidence });
+    const normalized = normalizeContacts([fallbackRow]);
+    res.json({
+      status: 'complete',
+      rows: normalized,
+      structure: 'unstructured',
+      detectedHeaders: [],
+      headerMapping: {},
+    });
+    return;
   } catch (error) {
     next(error);
+    return;
   } finally {
     await cleanupFile(stagedFilePath);
   }
 });
 
-specializedRouter.post('/process/business-card', upload.single('file'), async (req, res, next) => {
+specializedRouter.post('/process/business-card', upload.single('file'), async (req, res, next): Promise<void> => {
   let stagedFilePath: string | undefined;
   try {
     validateUploadedFile(req.file);
     validateUploadedFileContent(req.file.buffer, req.file.mimetype);
     stagedFilePath = await stageUploadedBuffer(req.file.buffer, req.file.mimetype);
+    const includeDebug = (req.query['debug'] === 'true') || (req.body?.debug === true);
+
+    const parseResult = await parseDocument(
+      { filePath: stagedFilePath, fileName: req.file.originalname, mimeType: req.file.mimetype },
+    );
+
+    if (parseResult.status === 'complete') {
+      const structured = extractBusinessCardFromMarkdown(parseResult.markdown);
+      const card = {
+        id: crypto.randomUUID(),
+        ...structured.card,
+      };
+
+      res.json({
+        status: 'complete',
+        card,
+        structure: structured.structure,
+        detectedHeaders: structured.detectedHeaders,
+        headerMapping: structured.headerMapping,
+        ...(includeDebug
+          ? {
+            debug: {
+              rawLines: parseResult.markdown
+                .split('\n')
+                .map((line) => line.trim())
+                .filter((line) => line !== '')
+                .slice(0, 60),
+            },
+          }
+          : {}),
+      });
+      return;
+    }
+
+    // Fallback to existing schema-driven extraction if parsing fails.
     const result = await extractDocument(
       { filePath: stagedFilePath, fileName: req.file.originalname, mimeType: req.file.mimetype },
       BUSINESS_CARD_SCHEMA,
@@ -103,9 +182,11 @@ specializedRouter.post('/process/business-card', upload.single('file'), async (r
       address: fieldMap['address'] ?? '',
       _confidence: result.confidence,
     };
-    res.json({ status: result.status, card, confidence: result.confidence });
+    res.json({ status: result.status, card, confidence: result.confidence, structure: 'text', detectedHeaders: [], headerMapping: {} });
+    return;
   } catch (error) {
     next(error);
+    return;
   } finally {
     await cleanupFile(stagedFilePath);
   }
