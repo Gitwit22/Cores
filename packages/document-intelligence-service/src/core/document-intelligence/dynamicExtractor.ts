@@ -89,6 +89,9 @@ const CONTACT_TOKEN_RE = /(?:https?:\/\/|www\.|[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]
 const CONTACT_TOKEN_GLOBAL_RE = new RegExp(CONTACT_TOKEN_RE.source, 'gi');
 const COMMON_ORG_WORD_RE = /\b(organization|org|company|corp|corporation|inc|llc|group|team|church|ministry|alliance|coalition|network|foundation|association|committee|institute|academy|school|university|college|agency|department|dept|office|center|centre|community|partners?)\b/i;
 const NOISE_NAME_WORD_RE = /\b(screening|share|date|comment|comments|phone|email|name|organization|org|entry|participant|attendee|signature|signed)\b/i;
+const SERVICE_LINE_TOKEN_RE = /\b(water|fire|theft|wind|mold|flood|storm|restoration|mitigation|cleanup|repair|services?)\b/i;
+const TITLE_HINT_RE = /\b(adjuster|manager|director|officer|consultant|specialist|analyst|broker|agent|representative|engineer|attorney|lawyer|owner|founder|president|vice\s+president|vp|supervisor|coordinator|administrator)\b/i;
+const LOGO_OF_RE = /logo\s+of\s+(.+?)(?:\s+(?:featuring|with|showing)\b|$)/i;
 const DEBUG_NAME_ORG_INFERENCE = process.env.DOC_INTEL_DEBUG_NAME_ORG === 'true';
 
 function normalizeWhitespace(value: string): string {
@@ -214,6 +217,140 @@ function isLikelyOrganizationName(value: string): boolean {
 
 function stripContactTokens(value: string): string {
   return normalizeWhitespace(value.replace(CONTACT_TOKEN_GLOBAL_RE, ' '));
+}
+
+function isLikelyServiceLine(value: string): boolean {
+  const trimmed = normalizeWhitespace(value);
+  if (!trimmed || hasContactToken(trimmed)) return false;
+
+  const parts = trimmed
+    .split(/\s*[/|,]\s*/)
+    .map((part) => normalizeWhitespace(part))
+    .filter(Boolean);
+
+  if (parts.length < 2) return false;
+  if (!SERVICE_LINE_TOKEN_RE.test(trimmed)) return false;
+
+  const uppercaseLike = parts.filter((part) => {
+    const letters = part.replace(/[^A-Za-z]/g, '');
+    if (!letters) return false;
+    return letters === letters.toUpperCase();
+  }).length;
+
+  return uppercaseLike >= Math.max(2, parts.length - 1);
+}
+
+function isLikelyTitleLine(value: string): boolean {
+  const trimmed = normalizeWhitespace(value);
+  if (!trimmed || hasContactToken(trimmed)) return false;
+  if (isLikelyServiceLine(trimmed)) return false;
+  if (COMMON_ORG_WORD_RE.test(trimmed) && !TITLE_HINT_RE.test(trimmed)) return false;
+
+  if (TITLE_HINT_RE.test(trimmed)) return true;
+
+  const words = trimmed.split(/\s+/).filter(Boolean);
+  if (words.length < 2 || words.length > 8) return false;
+
+  const alphaOnly = trimmed.replace(/[^A-Za-z]/g, '');
+  if (!alphaOnly) return false;
+  const isAllCaps = alphaOnly === alphaOnly.toUpperCase();
+  return isAllCaps && !isLikelyPersonName(trimmed);
+}
+
+function extractCompanyFromLogoText(line: string): string {
+  const match = LOGO_OF_RE.exec(line);
+  if (!match) return '';
+  return normalizeWhitespace(match[1] ?? '');
+}
+
+function inferBusinessCardIdentity(lines: string[]): {
+  fullName: string;
+  company: string;
+  title: string;
+  serviceTags: string[];
+} {
+  const normalizedLines = lines
+    .map((line) => normalizeWhitespace(line))
+    .filter(Boolean);
+
+  if (normalizedLines.length === 0) {
+    return { fullName: '', company: '', title: '', serviceTags: [] };
+  }
+
+  let fullName = '';
+  let company = '';
+  let title = '';
+  const serviceTags: string[] = [];
+  let nameIndex = -1;
+
+  for (let i = 0; i < normalizedLines.length; i += 1) {
+    const line = normalizedLines[i];
+    const isLogoLine = /\blogo\s+of\b/i.test(line);
+
+    if (!company) {
+      const logoCompany = extractCompanyFromLogoText(line);
+      if (logoCompany) {
+        company = logoCompany;
+      }
+    }
+
+    if (isLogoLine) {
+      continue;
+    }
+
+    if (isLikelyServiceLine(line)) {
+      serviceTags.push(line);
+      continue;
+    }
+
+    if (!fullName && isLikelyPersonName(line)) {
+      fullName = line;
+      nameIndex = i;
+      continue;
+    }
+
+    if (!fullName) {
+      const extractedName = extractLikelyNameFromFragment(line);
+      if (extractedName) {
+        fullName = extractedName;
+        nameIndex = i;
+      }
+    }
+  }
+
+  const titleScanStart = nameIndex >= 0 ? nameIndex + 1 : 0;
+  for (let i = titleScanStart; i < normalizedLines.length; i += 1) {
+    const line = normalizedLines[i];
+    if (line === fullName || serviceTags.includes(line)) continue;
+    if (isLikelyTitleLine(line)) {
+      title = line;
+      break;
+    }
+  }
+
+  if (!company) {
+    for (const line of normalizedLines) {
+      if (line === fullName || line === title) continue;
+      if (serviceTags.includes(line)) continue;
+      if (isLikelyOrganizationName(line) && !isLikelyPersonName(line)) {
+        company = line;
+        break;
+      }
+    }
+  }
+
+  if ((!fullName || !company) && normalizedLines.length > 0) {
+    const fallbackAnchor = nameIndex >= 0 ? nameIndex : 0;
+    const fallback = inferNameAndOrganizationFromContext(normalizedLines, fallbackAnchor);
+    if (!fullName && fallback.fullName) {
+      fullName = fallback.fullName;
+    }
+    if (!company && fallback.organization && !isLikelyServiceLine(fallback.organization)) {
+      company = fallback.organization;
+    }
+  }
+
+  return { fullName, company, title, serviceTags };
 }
 
 function inferNameAndOrganizationFromContext(lines: string[], anchorIndex: number): { fullName: string; organization: string } {
@@ -670,14 +807,20 @@ function enrichCardFromPatterns(card: NormalizedCard, text: string): void {
     }
   }
 
-  // Fill identity fields from unlabeled text blocks.
-  if ((!card.fullName || !card.company) && nonContactLines.length > 0) {
-    const identity = inferNameAndOrganizationFromContext(nonContactLines, 0);
+  // Fill identity fields from unlabeled text blocks using card-specific ranking.
+  if ((!card.fullName || !card.company || !card.title) && nonContactLines.length > 0) {
+    const identity = inferBusinessCardIdentity(nonContactLines);
     if (!card.fullName && identity.fullName) {
       card.fullName = identity.fullName;
     }
-    if (!card.company && identity.organization) {
-      card.company = identity.organization;
+    if (!card.company && identity.company) {
+      card.company = identity.company;
+    }
+    if (!card.title && identity.title) {
+      card.title = identity.title;
+    }
+    if (identity.serviceTags.length > 0 && !card.extraFields.serviceTags) {
+      card.extraFields.serviceTags = identity.serviceTags.join(' | ');
     }
   }
 }

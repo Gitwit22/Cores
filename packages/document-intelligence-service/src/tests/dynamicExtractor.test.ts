@@ -335,6 +335,27 @@ describe('dynamicExtractor', () => {
       expect(result.card.lastName).toBe('Fair');
     });
 
+    it('keeps slash-separated services out of company and infers person/title correctly', () => {
+      const text = [
+        'Logo of Community Claims Services featuring a house icon with water and fire elements',
+        'WATER/FIRE/THEFT/WIND',
+        'RAYMOND FAIR',
+        'PUBLIC INSURANCE ADJUSTER',
+        '313.587.4979',
+        'info@communityclaim.com',
+        'www.communityclaim.com',
+      ].join('\n');
+
+      const result = extractBusinessCard(makeParse(text, text));
+
+      expect(result.card.fullName).toBe('RAYMOND FAIR');
+      expect(result.card.firstName).toBe('RAYMOND');
+      expect(result.card.lastName).toBe('FAIR');
+      expect(result.card.title).toBe('PUBLIC INSURANCE ADJUSTER');
+      expect(result.card.company).toBe('Community Claims Services');
+      expect(result.card.extraFields.serviceTags).toContain('WATER/FIRE/THEFT/WIND');
+    });
+
     it('preserves rawText', () => {
       const text = 'John Doe\njohn@test.com';
       const result = extractBusinessCard(makeParse(text, ''));
