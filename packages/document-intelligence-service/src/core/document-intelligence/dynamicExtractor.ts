@@ -89,6 +89,7 @@ const CONTACT_TOKEN_RE = /(?:https?:\/\/|www\.|[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]
 const CONTACT_TOKEN_GLOBAL_RE = new RegExp(CONTACT_TOKEN_RE.source, 'gi');
 const COMMON_ORG_WORD_RE = /\b(organization|org|company|corp|corporation|inc|llc|group|team|church|ministry|alliance|coalition|network|foundation|association|committee|institute|academy|school|university|college|agency|department|dept|office|center|centre|community|partners?)\b/i;
 const NOISE_NAME_WORD_RE = /\b(screening|share|date|comment|comments|phone|email|name|organization|org|entry|participant|attendee|signature|signed)\b/i;
+const DEBUG_NAME_ORG_INFERENCE = process.env.DOC_INTEL_DEBUG_NAME_ORG === 'true';
 
 function normalizeWhitespace(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
@@ -106,9 +107,12 @@ function isLikelyPersonName(value: string): boolean {
   if (NOISE_NAME_WORD_RE.test(trimmed)) return false;
 
   const tokens = trimmed.split(' ').filter(Boolean);
-  if (tokens.length < 2 || tokens.length > 4) return false;
+  if (tokens.length < 2 || tokens.length > 5) return false;
 
-  const validTokenCount = tokens.filter((token) => /^[A-Z][a-z'\-.]+$/.test(token)).length;
+  // Accept standard proper-name tokens and short initial-like tokens.
+  const validTokenCount = tokens.filter(
+    (token) => /^[A-Z][a-z'\-.]+$/.test(token) || /^[A-Z]{1,2}\.?$/.test(token),
+  ).length;
   return validTokenCount >= Math.max(2, tokens.length - 1);
 }
 
@@ -136,60 +140,82 @@ function stripContactTokens(value: string): string {
 }
 
 function inferNameAndOrganizationFromContext(lines: string[], anchorIndex: number): { fullName: string; organization: string } {
-  const context = [
+  const candidateLines = [
     lines[anchorIndex] ?? '',
     lines[anchorIndex - 1] ?? '',
     lines[anchorIndex + 1] ?? '',
     lines[anchorIndex - 2] ?? '',
+    lines[anchorIndex + 2] ?? '',
   ]
     .map((line) => normalizeWhitespace(line))
     .filter(Boolean);
 
-  const fragments: string[] = [];
-  for (const line of context) {
-    const stripped = stripContactTokens(line);
-    if (!stripped) continue;
-    const parts = stripped
-      .split(/\s{2,}|\||,|;/)
-      .map((part) => normalizeWhitespace(part))
-      .filter(Boolean);
-    if (parts.length > 0) {
-      fragments.push(...parts);
-    } else {
-      fragments.push(stripped);
-    }
+  if (DEBUG_NAME_ORG_INFERENCE) {
+    console.log('[doc-intel] name/org inference candidates', {
+      anchorIndex,
+      candidateLines,
+    });
   }
 
   let fullName = '';
   let organization = '';
 
-  for (const fragment of fragments) {
-    const inlineAcronymMatch = /^(.*\S)\s+([A-Z]{2,8})$/.exec(fragment);
-    if (inlineAcronymMatch) {
-      const possibleName = normalizeWhitespace(inlineAcronymMatch[1]);
-      const possibleOrg = inlineAcronymMatch[2];
-      if (!fullName && isLikelyPersonName(possibleName)) {
-        fullName = possibleName;
+  for (const line of candidateLines) {
+    const stripped = stripContactTokens(line);
+    if (!stripped) continue;
+
+    const parts = stripped
+      .split(/\s{2,}|\||,|;/)
+      .map((part) => normalizeWhitespace(part))
+      .filter(Boolean);
+
+    const fragments = parts.length > 1 ? parts : [stripped, ...parts];
+
+    for (const fragment of fragments) {
+      const inlineAcronymMatch = /^(.+?)\s+([A-Z]{2,8})$/.exec(fragment);
+      if (inlineAcronymMatch) {
+        const possibleName = normalizeWhitespace(inlineAcronymMatch[1]);
+        const possibleOrg = inlineAcronymMatch[2];
+        if (!fullName && isLikelyPersonName(possibleName)) {
+          fullName = possibleName;
+        }
+        if (!organization) {
+          organization = possibleOrg;
+        }
+        if (fullName && organization) break;
+        continue;
       }
-      if (!organization && isLikelyOrganizationName(possibleOrg)) {
-        organization = possibleOrg;
+
+      if (!fullName && isLikelyPersonName(fragment)) {
+        fullName = fragment;
+        continue;
+      }
+      const fragmentLooksLikeOrgAcronym = /^[A-Z]{2,8}$/.test(fragment);
+      const fragmentHasOrgWord = COMMON_ORG_WORD_RE.test(fragment);
+      const fragmentLooksLikePerson = isLikelyPersonName(fragment);
+
+      if (
+        !organization
+        && isLikelyOrganizationName(fragment)
+        && (!fragmentLooksLikePerson || fragmentLooksLikeOrgAcronym || fragmentHasOrgWord)
+      ) {
+        organization = fragment;
       }
       if (fullName && organization) break;
     }
 
-    if (!fullName && isLikelyPersonName(fragment)) {
-      fullName = fragment;
-      continue;
-    }
-    if (!organization && isLikelyOrganizationName(fragment)) {
-      organization = fragment;
-    }
     if (fullName && organization) break;
   }
 
   if (!organization) {
-    const acronym = fragments.find((fragment) => /^[A-Z]{2,8}$/.test(fragment));
-    if (acronym) organization = acronym;
+    for (const line of candidateLines) {
+      const stripped = stripContactTokens(line);
+      const acronym = stripped.split(/\s+/).find((token) => /^[A-Z]{2,8}$/.test(token));
+      if (acronym) {
+        organization = acronym;
+        break;
+      }
+    }
   }
 
   return { fullName, organization };
