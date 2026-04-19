@@ -9,7 +9,7 @@ export interface DocumentIntelligenceConfig {
 
 const DEFAULT_MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
-const DEFAULT_LLAMA_PARSE_TIER: DocumentIntelligenceConfig['llamaParseTier'] = 'cost_effective';
+const DEFAULT_LLAMA_PARSE_TIER: DocumentIntelligenceConfig['llamaParseTier'] = 'agentic';
 const DEFAULT_LLAMA_PARSE_VERSION = 'latest';
 
 export function getDocumentIntelligenceConfig(): DocumentIntelligenceConfig {

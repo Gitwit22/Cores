@@ -91,6 +91,59 @@ describe('structureAnalyzer', () => {
         'Share Info': '',
       });
     });
+
+    it('parses HTML table output with grouped headers from LlamaParse', () => {
+      const markdown = [
+        '<table>',
+        '  <thead>',
+        '    <tr>',
+        '      <th>Name</th>',
+        '      <th>Organization</th>',
+        '      <th colspan="2">Contact Info we can reach you at</th>',
+        '      <th colspan="2">Check for Yes</th>',
+        '    </tr>',
+        '    <tr>',
+        '      <th></th>',
+        '      <th></th>',
+        '      <th>Email</th>',
+        '      <th>Phone</th>',
+        '      <th>Screening</th>',
+        '      <th>Share Info</th>',
+        '    </tr>',
+        '  </thead>',
+        '  <tbody>',
+        '    <tr>',
+        '      <td>Lydiam McCullough</td>',
+        '      <td>NLSM</td>',
+        '      <td>LMcCullough@wcns.org</td>',
+        '      <td>313-719-0973</td>',
+        '      <td>[ ]</td>',
+        '      <td>[ ]</td>',
+        '    </tr>',
+        '  </tbody>',
+        '</table>',
+      ].join('\n');
+
+      const result = analyzeStructure(markdown, markdown);
+      expect(result.structure).toBe('table');
+      expect(result.detectedHeaders).toEqual([
+        'Name',
+        'Organization',
+        'Email',
+        'Phone',
+        'Screening',
+        'Share Info',
+      ]);
+      expect(result.rawRows).toHaveLength(1);
+      expect(result.rawRows[0]).toEqual({
+        Name: 'Lydiam McCullough',
+        Organization: 'NLSM',
+        Email: 'LMcCullough@wcns.org',
+        Phone: '313-719-0973',
+        Screening: '[ ]',
+        'Share Info': '[ ]',
+      });
+    });
   });
 
   describe('analyzeStructure — single entity detection', () => {

@@ -41,6 +41,116 @@ const SIGNIN_TEXT_HEADER_ALIASES: Record<string, string[]> = {
 
 const PHONE_LIKE_RE = /(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/;
 
+function stripHtml(value: string): string {
+  return value
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function parseHtmlTableRows(section: string): Array<Array<{ text: string; colspan: number }>> {
+  const rows: Array<Array<{ text: string; colspan: number }>> = [];
+  const rowMatches = section.match(/<tr\b[\s\S]*?<\/tr>/gi) ?? [];
+
+  rowMatches.forEach((rowHtml) => {
+    const cells: Array<{ text: string; colspan: number }> = [];
+    const cellRegex = /<(th|td)\b([^>]*)>([\s\S]*?)<\/\1>/gi;
+    let match: RegExpExecArray | null;
+
+    while ((match = cellRegex.exec(rowHtml)) !== null) {
+      const attrs = match[2] ?? '';
+      const rawCell = match[3] ?? '';
+      const colspanMatch = /colspan\s*=\s*["']?(\d+)/i.exec(attrs);
+      const colspan = Math.max(1, Number(colspanMatch?.[1] ?? '1'));
+      cells.push({ text: stripHtml(rawCell), colspan });
+    }
+
+    if (cells.length > 0) {
+      rows.push(cells);
+    }
+  });
+
+  return rows;
+}
+
+function expandColspans(cells: Array<{ text: string; colspan: number }>): string[] {
+  const expanded: string[] = [];
+  cells.forEach((cell) => {
+    for (let i = 0; i < cell.colspan; i++) {
+      expanded.push(cell.text);
+    }
+  });
+  return expanded;
+}
+
+function extractHtmlTables(content: string): { headers: string[]; rows: Array<Record<string, string>> } {
+  const tables = content.match(/<table\b[\s\S]*?<\/table>/gi) ?? [];
+
+  for (const tableHtml of tables) {
+    const theadMatch = /<thead\b[\s\S]*?<\/thead>/i.exec(tableHtml);
+    const tbodyMatch = /<tbody\b[\s\S]*?<\/tbody>/i.exec(tableHtml);
+
+    const headerRowsRaw = theadMatch ? parseHtmlTableRows(theadMatch[0]) : [];
+    const bodyRowsRaw = tbodyMatch ? parseHtmlTableRows(tbodyMatch[0]) : parseHtmlTableRows(tableHtml);
+    if (bodyRowsRaw.length === 0) continue;
+
+    let activeHeaders: string[] = [];
+
+    if (headerRowsRaw.length > 0) {
+      activeHeaders = expandColspans(headerRowsRaw[0]);
+
+      if (headerRowsRaw.length > 1) {
+        const subheaders = expandColspans(headerRowsRaw[1]);
+        if (
+          subheaders.length >= Math.min(2, activeHeaders.length)
+          && isLikelyStackedHeaderRow(subheaders)
+        ) {
+          activeHeaders = flattenStackedHeaders(activeHeaders, subheaders);
+        }
+      }
+    } else {
+      // Fallback when <thead> is missing: infer headers from first row if it looks header-like.
+      const firstRow = expandColspans(bodyRowsRaw[0]);
+      if (isLikelyStackedHeaderRow(firstRow)) {
+        activeHeaders = firstRow;
+        bodyRowsRaw.shift();
+      }
+    }
+
+    if (activeHeaders.length === 0) continue;
+
+    const rows: Array<Record<string, string>> = [];
+    bodyRowsRaw.forEach((rowRaw) => {
+      const cells = expandColspans(rowRaw);
+      const row: Record<string, string> = {};
+
+      for (let col = 0; col < activeHeaders.length; col++) {
+        row[activeHeaders[col]] = (cells[col] ?? '').trim();
+      }
+
+      const hasContent = Object.values(row).some((value) => value.length > 0);
+      if (hasContent) {
+        rows.push(row);
+      }
+    });
+
+    if (rows.length > 0) {
+      return {
+        headers: activeHeaders,
+        rows,
+      };
+    }
+  }
+
+  return { headers: [], rows: [] };
+}
+
 function normalizeToken(value: string): string {
   return value
     .toLowerCase()
@@ -173,6 +283,16 @@ function extractAlignedTextTable(content: string): { headers: string[]; rows: Ar
  * Analyze parsed text/markdown to detect document structure.
  */
 export function analyzeStructure(text: string, markdown: string): StructureAnalysis {
+  const htmlTableResult = extractHtmlTables(markdown || text);
+  if (htmlTableResult.rows.length > 0) {
+    return {
+      structure: 'table',
+      detectedHeaders: htmlTableResult.headers,
+      rawRows: htmlTableResult.rows,
+      fullText: text,
+    };
+  }
+
   // Prefer markdown for table detection — LlamaParse returns markdown tables
   const tableResult = extractMarkdownTables(markdown || text);
 
