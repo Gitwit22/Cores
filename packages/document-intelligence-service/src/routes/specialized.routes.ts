@@ -24,6 +24,31 @@ interface ParseDebugSummary {
   hasPipeTable: boolean;
   markdownPreview: string[];
   textPreview: string[];
+  quality?: ExtractionQualitySummary;
+}
+
+interface SigninQualitySummary {
+  rowCount: number;
+  nonEmptyRowCount: number;
+  namePopulatedCount: number;
+  organizationPopulatedCount: number;
+  nameCoverage: number;
+  organizationCoverage: number;
+  detectedHeadersCount: number;
+  mappedHeaderCount: number;
+  coreHeadersMapped: string[];
+}
+
+interface CardQualitySummary {
+  populatedCoreFields: string[];
+  missingCoreFields: string[];
+  populatedCoreCount: number;
+  totalCoreCount: number;
+}
+
+interface ExtractionQualitySummary {
+  signin?: SigninQualitySummary;
+  businessCard?: CardQualitySummary;
 }
 
 function previewLines(value: string, maxLines = 25, maxChars = 220): string[] {
@@ -61,6 +86,68 @@ function buildParseDebugSummary(parseResult: NormalizedParseResult): ParseDebugS
   };
 }
 
+function asCleanString(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  return value.trim();
+}
+
+function clampRatio(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(1, Math.max(0, value));
+}
+
+function buildSigninQualitySummary(
+  normalizedRows: Array<Record<string, unknown>>,
+  detectedHeaders: string[],
+  headerMapping: Array<{ normalized: string | null }>,
+): SigninQualitySummary {
+  const rowCount = normalizedRows.length;
+  const nonEmptyRowCount = normalizedRows.filter((row) => {
+    return [row.fullName, row.organization, row.email, row.phone]
+      .map((value) => asCleanString(value))
+      .some((value) => value.length > 0);
+  }).length;
+
+  const namePopulatedCount = normalizedRows.filter(
+    (row) => asCleanString(row.fullName).length > 0,
+  ).length;
+  const organizationPopulatedCount = normalizedRows.filter(
+    (row) => asCleanString(row.organization).length > 0,
+  ).length;
+
+  const mappedHeaders = headerMapping
+    .map((mapping) => mapping.normalized)
+    .filter((normalized): normalized is string => typeof normalized === 'string' && normalized.length > 0);
+
+  const coreHeaders = ['fullName', 'organization', 'email', 'phone'];
+  const coreHeadersMapped = coreHeaders.filter((field) => mappedHeaders.includes(field));
+
+  return {
+    rowCount,
+    nonEmptyRowCount,
+    namePopulatedCount,
+    organizationPopulatedCount,
+    nameCoverage: clampRatio(rowCount > 0 ? namePopulatedCount / rowCount : 0),
+    organizationCoverage: clampRatio(rowCount > 0 ? organizationPopulatedCount / rowCount : 0),
+    detectedHeadersCount: detectedHeaders.length,
+    mappedHeaderCount: mappedHeaders.length,
+    coreHeadersMapped,
+  };
+}
+
+function buildCardQualitySummary(card: Record<string, unknown>): CardQualitySummary {
+  const coreFields = ['fullName', 'company', 'email', 'phone'];
+  const populatedCoreFields = coreFields.filter((field) => asCleanString(card[field]).length > 0);
+  const missingCoreFields = coreFields.filter((field) => !populatedCoreFields.includes(field));
+
+  return {
+    populatedCoreFields,
+    missingCoreFields,
+    populatedCoreCount: populatedCoreFields.length,
+    totalCoreCount: coreFields.length,
+  };
+}
+
 specializedRouter.post('/process/signin-sheet', upload.single('file'), async (req, res, next): Promise<void> => {
   let stagedFilePath: string | undefined;
   try {
@@ -83,6 +170,16 @@ specializedRouter.post('/process/signin-sheet', upload.single('file'), async (re
     for (let i = 0; i < normalizedRows.length; i++) {
       (normalizedRows[i] as Record<string, unknown>).extraFields =
         result.normalizedRows[i].extraFields;
+    }
+
+    if (parseDebug) {
+      parseDebug.quality = {
+        signin: buildSigninQualitySummary(
+          normalizedRows as Array<Record<string, unknown>>,
+          result.detectedHeaders,
+          result.headerMapping,
+        ),
+      };
     }
 
     res.json({
@@ -125,6 +222,12 @@ specializedRouter.post('/process/business-card', upload.single('file'), async (r
       rawText: result.card.rawText,
     };
 
+    if (parseDebug) {
+      parseDebug.quality = {
+        businessCard: buildCardQualitySummary(card),
+      };
+    }
+
     res.json({
       status: result.status,
       structure: result.structure,
@@ -164,6 +267,16 @@ specializedRouter.post('/process/contact-sheet', upload.single('file'), async (r
     for (let i = 0; i < normalizedRows.length; i++) {
       (normalizedRows[i] as Record<string, unknown>).extraFields =
         result.normalizedRows[i].extraFields;
+    }
+
+    if (parseDebug) {
+      parseDebug.quality = {
+        signin: buildSigninQualitySummary(
+          normalizedRows as Array<Record<string, unknown>>,
+          result.detectedHeaders,
+          result.headerMapping,
+        ),
+      };
     }
 
     res.json({
