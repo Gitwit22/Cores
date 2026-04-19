@@ -306,6 +306,35 @@ describe('dynamicExtractor', () => {
       expect(result.card.extraFields['Badge']).toBe('12345');
     });
 
+    it('maps contact name labels into fullName and derives first/last names', () => {
+      const text = [
+        'Contact Name: Raymond Fair',
+        'Organization: Community Claims Services',
+        'Email: info@communityclaim.com',
+        'Phone: 313.587.4979',
+      ].join('\n');
+
+      const result = extractBusinessCard(makeParse(text, text));
+
+      expect(result.card.fullName).toBe('Raymond Fair');
+      expect(result.card.firstName).toBe('Raymond');
+      expect(result.card.lastName).toBe('Fair');
+      expect(result.card.company).toBe('Community Claims Services');
+    });
+
+    it('normalizes comma-separated full names into first/last name fields', () => {
+      const text = [
+        'Name: Fair, Raymond',
+        'Email: info@communityclaim.com',
+      ].join('\n');
+
+      const result = extractBusinessCard(makeParse(text, text));
+
+      expect(result.card.fullName).toBe('Raymond Fair');
+      expect(result.card.firstName).toBe('Raymond');
+      expect(result.card.lastName).toBe('Fair');
+    });
+
     it('preserves rawText', () => {
       const text = 'John Doe\njohn@test.com';
       const result = extractBusinessCard(makeParse(text, ''));

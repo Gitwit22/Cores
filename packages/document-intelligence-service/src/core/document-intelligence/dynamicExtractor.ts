@@ -95,6 +95,58 @@ function normalizeWhitespace(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
 }
 
+function splitPersonName(fullName: string): { fullName: string; firstName: string; lastName: string } {
+  const normalized = normalizeWhitespace(fullName);
+  if (!normalized) {
+    return { fullName: '', firstName: '', lastName: '' };
+  }
+
+  const commaMatch = /^([^,]+),\s*(.+)$/.exec(normalized);
+  if (commaMatch) {
+    const lastName = normalizeWhitespace(commaMatch[1]);
+    const firstName = normalizeWhitespace(commaMatch[2]);
+    return {
+      fullName: `${firstName} ${lastName}`.trim(),
+      firstName,
+      lastName,
+    };
+  }
+
+  const parts = normalized.split(' ').filter(Boolean);
+  if (parts.length === 1) {
+    return { fullName: normalized, firstName: parts[0], lastName: '' };
+  }
+
+  return {
+    fullName: normalized,
+    firstName: parts[0] ?? '',
+    lastName: parts.slice(1).join(' '),
+  };
+}
+
+function syncCardNameFields(card: NormalizedCard): void {
+  const splitFromFullName = splitPersonName(card.fullName);
+
+  if (!card.fullName && (card.firstName || card.lastName)) {
+    card.fullName = normalizeWhitespace([card.firstName, card.lastName].filter(Boolean).join(' '));
+  }
+
+  if (card.fullName) {
+    if (!card.firstName) {
+      card.firstName = splitFromFullName.firstName;
+    }
+    if (!card.lastName) {
+      card.lastName = splitFromFullName.lastName;
+    }
+    card.fullName = splitFromFullName.fullName;
+    return;
+  }
+
+  if (card.firstName || card.lastName) {
+    card.fullName = normalizeWhitespace([card.firstName, card.lastName].filter(Boolean).join(' '));
+  }
+}
+
 function hasContactToken(value: string): boolean {
   return CONTACT_TOKEN_RE.test(value);
 }
@@ -492,6 +544,7 @@ function extractCardFromLabels(analysis: StructureAnalysis): CardExtractionResul
 
   // Also run pattern detection on values that may have been mapped to wrong fields
   enrichCardFromPatterns(card, analysis.fullText);
+  syncCardNameFields(card);
 
   const mappedCount = headerMapping.filter((m) => m.normalized !== null).length;
   const confidence =
@@ -544,6 +597,8 @@ function extractCardFromPatterns(analysis: StructureAnalysis): CardExtractionRes
       }
     }
   }
+
+  syncCardNameFields(card);
 
   const filledFields = [
     card.fullName, card.firstName, card.lastName, card.company,

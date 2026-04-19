@@ -45,7 +45,7 @@ const SIGNIN_HEADER_RULES: Array<[RegExp, StandardSigninField]> = [
 ];
 
 const CARD_LABEL_RULES: Array<[RegExp, StandardCardField]> = [
-  [/^(full\s*name|name)$/i, 'fullName'],
+  [/^(full\s*name|name|contact\s*name|person\s*name|cardholder|card\s*holder)$/i, 'fullName'],
   [/^(first\s*name|given\s*name|first)$/i, 'firstName'],
   [/^(last\s*name|surname|family\s*name|last)$/i, 'lastName'],
   [/^(company|org(anization)?|employer|firm|business|corp(oration)?)$/i, 'company'],
