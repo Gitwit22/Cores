@@ -11,6 +11,7 @@ import {
 } from '../utils/fileValidation.js';
 import { stageUploadedBuffer } from '../utils/tempFiles.js';
 import { normalizeContacts } from '../utils/contactUtils.js';
+import type { NormalizedParseResult } from '../core/document-intelligence/types.js';
 
 const specializedRouter = Router();
 const upload = multer({
@@ -18,6 +19,47 @@ const upload = multer({
   limits: createMulterLimits(),
   fileFilter,
 });
+
+interface ParseDebugSummary {
+  hasPipeTable: boolean;
+  markdownPreview: string[];
+  textPreview: string[];
+}
+
+function previewLines(value: string, maxLines = 25, maxChars = 220): string[] {
+  return value
+    .split('\n')
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .slice(0, maxLines)
+    .map((line) => (line.length > maxChars ? `${line.slice(0, maxChars)}...` : line));
+}
+
+function hasPipeTable(markdown: string): boolean {
+  const lines = markdown.split('\n').map((line) => line.trim());
+  for (let i = 0; i < lines.length - 1; i++) {
+    if (!/^\|.+\|$/.test(lines[i])) continue;
+    if (/^\|[\s:]*-+[\s:]*(\|[\s:]*-+[\s:]*)+\|$/.test(lines[i + 1])) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function shouldIncludeParseDebug(req: { query: Record<string, unknown> }): boolean {
+  const envEnabled = process.env.DOC_INTEL_INCLUDE_PARSE_DEBUG === 'true';
+  const queryValue = String(req.query?.debugParse ?? '').toLowerCase();
+  const queryEnabled = queryValue === '1' || queryValue === 'true' || queryValue === 'yes';
+  return envEnabled || queryEnabled;
+}
+
+function buildParseDebugSummary(parseResult: NormalizedParseResult): ParseDebugSummary {
+  return {
+    hasPipeTable: hasPipeTable(parseResult.markdown ?? ''),
+    markdownPreview: previewLines(parseResult.markdown ?? ''),
+    textPreview: previewLines(parseResult.text ?? ''),
+  };
+}
 
 specializedRouter.post('/process/signin-sheet', upload.single('file'), async (req, res, next): Promise<void> => {
   let stagedFilePath: string | undefined;
@@ -30,6 +72,7 @@ specializedRouter.post('/process/signin-sheet', upload.single('file'), async (re
       { filePath: stagedFilePath, fileName: req.file.originalname, mimeType: req.file.mimetype },
     );
     const result = extractSigninSheet(parseResult);
+    const parseDebug = shouldIncludeParseDebug(req) ? buildParseDebugSummary(parseResult) : undefined;
 
     // Normalize contact fields in each row
     const normalizedRows = normalizeContacts(
@@ -50,6 +93,7 @@ specializedRouter.post('/process/signin-sheet', upload.single('file'), async (re
       rows: normalizedRows,
       rawRows: result.rawRows,
       confidence: result.confidence,
+      parseDebug,
     });
     return;
   } catch (error) {
@@ -71,6 +115,7 @@ specializedRouter.post('/process/business-card', upload.single('file'), async (r
       { filePath: stagedFilePath, fileName: req.file.originalname, mimeType: req.file.mimetype },
     );
     const result = extractBusinessCard(parseResult);
+    const parseDebug = shouldIncludeParseDebug(req) ? buildParseDebugSummary(parseResult) : undefined;
 
     // Normalize known contact fields
     const normalized = normalizeContacts([{ ...result.card }]);
@@ -87,6 +132,7 @@ specializedRouter.post('/process/business-card', upload.single('file'), async (r
       headerMapping: result.headerMapping,
       card,
       confidence: result.confidence,
+      parseDebug,
     });
     return;
   } catch (error) {
@@ -109,6 +155,7 @@ specializedRouter.post('/process/contact-sheet', upload.single('file'), async (r
       { filePath: stagedFilePath, fileName: req.file.originalname, mimeType: req.file.mimetype },
     );
     const result = extractSigninSheet(parseResult);
+    const parseDebug = shouldIncludeParseDebug(req) ? buildParseDebugSummary(parseResult) : undefined;
 
     const normalizedRows = normalizeContacts(
       result.normalizedRows.map((row) => ({ ...row })),
@@ -127,6 +174,7 @@ specializedRouter.post('/process/contact-sheet', upload.single('file'), async (r
       rows: normalizedRows,
       rawRows: result.rawRows,
       confidence: result.confidence,
+      parseDebug,
     });
     return;
   } catch (error) {

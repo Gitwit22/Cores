@@ -131,6 +131,40 @@ describe('dynamicExtractor', () => {
       expect(result.structure).toBe('unstructured');
       expect(result.normalizedRows.length).toBeGreaterThan(0);
     });
+
+    it('infers name and organization from unstructured contact lines', () => {
+      const text = [
+        'Jordan Lee WCNS jordan.lee@wcns.org (313) 555-5800',
+        'Taylor Reed NLSM taylor@nlsm.org 313-555-9012',
+      ].join('\n');
+
+      const result = extractSigninSheet(makeParse(text, ''));
+
+      expect(result.structure).toBe('unstructured');
+      expect(result.normalizedRows).toHaveLength(2);
+      expect(result.normalizedRows[0].fullName).toBe('Jordan Lee');
+      expect(result.normalizedRows[0].organization).toBe('WCNS');
+      expect(result.normalizedRows[1].fullName).toBe('Taylor Reed');
+      expect(result.normalizedRows[1].organization).toBe('NLSM');
+    });
+
+    it('detects table-like OCR text even when markdown has no pipe table', () => {
+      const text = [
+        'Name            Organization      Email                      Phone',
+        'Jordan Lee      WCNS              jordan.lee@wcns.org       (313) 555-5800',
+        'Taylor Reed     NLSM              taylor@nlsm.org           313-555-9012',
+      ].join('\n');
+
+      const result = extractSigninSheet(makeParse(text, text));
+
+      expect(result.structure).toBe('table');
+      expect(result.detectedHeaders).toEqual(['Name', 'Organization', 'Email', 'Phone']);
+      expect(result.normalizedRows).toHaveLength(2);
+      expect(result.normalizedRows[0].fullName).toBe('Jordan Lee');
+      expect(result.normalizedRows[0].organization).toBe('WCNS');
+      expect(result.normalizedRows[1].fullName).toBe('Taylor Reed');
+      expect(result.normalizedRows[1].organization).toBe('NLSM');
+    });
   });
 
   // ── Business card ──────────────────────────────────────────────────────────
@@ -164,6 +198,8 @@ describe('dynamicExtractor', () => {
       ].join('\n');
 
       const result = extractBusinessCard(makeParse(text, ''));
+      expect(result.card.fullName).toBe('John Doe');
+      expect(result.card.company).toBe('Acme Corporation');
       expect(result.card.email).toBe('john.doe@acme.com');
       expect(result.card.phone).toContain('555');
       expect(result.card.website).toContain('acme.com');

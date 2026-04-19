@@ -85,6 +85,116 @@ const SIGNIN_HEADER_ALIASES: Record<string, string[]> = {
   comments: ['comments', 'comment', 'notes', 'note', 'remarks', 'other', 'additional'],
 };
 
+const CONTACT_TOKEN_RE = /(?:https?:\/\/|www\.|[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}|(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/i;
+const CONTACT_TOKEN_GLOBAL_RE = new RegExp(CONTACT_TOKEN_RE.source, 'gi');
+const COMMON_ORG_WORD_RE = /\b(organization|org|company|corp|corporation|inc|llc|group|team|church|ministry|alliance|coalition|network|foundation|association|committee|institute|academy|school|university|college|agency|department|dept|office|center|centre|community|partners?)\b/i;
+const NOISE_NAME_WORD_RE = /\b(screening|share|date|comment|comments|phone|email|name|organization|org|entry|participant|attendee|signature|signed)\b/i;
+
+function normalizeWhitespace(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+function hasContactToken(value: string): boolean {
+  return CONTACT_TOKEN_RE.test(value);
+}
+
+function isLikelyPersonName(value: string): boolean {
+  const trimmed = normalizeWhitespace(value);
+  if (!trimmed) return false;
+  if (trimmed.length < 3 || trimmed.length > 60) return false;
+  if (/[0-9]/.test(trimmed) || hasContactToken(trimmed)) return false;
+  if (NOISE_NAME_WORD_RE.test(trimmed)) return false;
+
+  const tokens = trimmed.split(' ').filter(Boolean);
+  if (tokens.length < 2 || tokens.length > 4) return false;
+
+  const validTokenCount = tokens.filter((token) => /^[A-Z][a-z'\-.]+$/.test(token)).length;
+  return validTokenCount >= Math.max(2, tokens.length - 1);
+}
+
+function isLikelyOrganizationName(value: string): boolean {
+  const trimmed = normalizeWhitespace(value);
+  if (!trimmed) return false;
+  if (trimmed.length < 2 || trimmed.length > 80) return false;
+  if (hasContactToken(trimmed)) return false;
+
+  if (/^[A-Z]{2,8}$/.test(trimmed)) return true;
+  if (COMMON_ORG_WORD_RE.test(trimmed)) return true;
+
+  // Many organizations appear as two+ capitalized words without suffixes.
+  const tokens = trimmed.split(' ').filter(Boolean);
+  if (tokens.length >= 2 && tokens.length <= 6) {
+    const capitalized = tokens.filter((token) => /^[A-Z][A-Za-z0-9&'\-.]+$/.test(token)).length;
+    return capitalized >= Math.max(2, tokens.length - 1);
+  }
+
+  return false;
+}
+
+function stripContactTokens(value: string): string {
+  return normalizeWhitespace(value.replace(CONTACT_TOKEN_GLOBAL_RE, ' '));
+}
+
+function inferNameAndOrganizationFromContext(lines: string[], anchorIndex: number): { fullName: string; organization: string } {
+  const context = [
+    lines[anchorIndex] ?? '',
+    lines[anchorIndex - 1] ?? '',
+    lines[anchorIndex + 1] ?? '',
+    lines[anchorIndex - 2] ?? '',
+  ]
+    .map((line) => normalizeWhitespace(line))
+    .filter(Boolean);
+
+  const fragments: string[] = [];
+  for (const line of context) {
+    const stripped = stripContactTokens(line);
+    if (!stripped) continue;
+    const parts = stripped
+      .split(/\s{2,}|\||,|;/)
+      .map((part) => normalizeWhitespace(part))
+      .filter(Boolean);
+    if (parts.length > 0) {
+      fragments.push(...parts);
+    } else {
+      fragments.push(stripped);
+    }
+  }
+
+  let fullName = '';
+  let organization = '';
+
+  for (const fragment of fragments) {
+    const inlineAcronymMatch = /^(.*\S)\s+([A-Z]{2,8})$/.exec(fragment);
+    if (inlineAcronymMatch) {
+      const possibleName = normalizeWhitespace(inlineAcronymMatch[1]);
+      const possibleOrg = inlineAcronymMatch[2];
+      if (!fullName && isLikelyPersonName(possibleName)) {
+        fullName = possibleName;
+      }
+      if (!organization && isLikelyOrganizationName(possibleOrg)) {
+        organization = possibleOrg;
+      }
+      if (fullName && organization) break;
+    }
+
+    if (!fullName && isLikelyPersonName(fragment)) {
+      fullName = fragment;
+      continue;
+    }
+    if (!organization && isLikelyOrganizationName(fragment)) {
+      organization = fragment;
+    }
+    if (fullName && organization) break;
+  }
+
+  if (!organization) {
+    const acronym = fragments.find((fragment) => /^[A-Z]{2,8}$/.test(fragment));
+    if (acronym) organization = acronym;
+  }
+
+  return { fullName, organization };
+}
+
 function normalizeSigninHeaderValue(value: string): string {
   return value
     .toLowerCase()
@@ -226,17 +336,35 @@ function extractSigninFromText(analysis: StructureAnalysis): SigninExtractionRes
     };
   }
 
-  // Build one row per detected contact from text
-  const rowCount = Math.max(emails.length, phones.length, 1);
+  const lines = analysis.fullText
+    .split('\n')
+    .map((line) => normalizeWhitespace(line))
+    .filter(Boolean);
+
+  const anchorIndexes: number[] = [];
+  lines.forEach((line, index) => {
+    if (extractEmails(line).length > 0 || extractPhones(line).length > 0) {
+      anchorIndexes.push(index);
+    }
+  });
+
+  // Build one row per detected contact line when possible.
+  const rowCount = Math.max(anchorIndexes.length, emails.length, phones.length, 1);
   const normalizedRows: NormalizedSigninRow[] = [];
 
   for (let i = 0; i < rowCount; i++) {
+    const anchorIndex = anchorIndexes[i] ?? Math.min(i, Math.max(lines.length - 1, 0));
+    const anchorLine = anchorIndex >= 0 ? lines[anchorIndex] ?? '' : '';
+    const lineEmails = extractEmails(anchorLine);
+    const linePhones = extractPhones(anchorLine);
+    const inferredIdentity = inferNameAndOrganizationFromContext(lines, anchorIndex);
+
     normalizedRows.push({
       id: crypto.randomUUID(),
-      fullName: '',
-      organization: '',
-      email: emails[i] ?? '',
-      phone: phones[i] ?? '',
+      fullName: inferredIdentity.fullName,
+      organization: inferredIdentity.organization,
+      email: lineEmails[0] ?? emails[i] ?? '',
+      phone: linePhones[0] ?? phones[i] ?? '',
       screening: '',
       shareInfo: '',
       date: '',
@@ -405,12 +533,16 @@ function enrichCardFromPatterns(card: NormalizedCard, text: string): void {
   }
 
   // Try to infer other fields from remaining lines
-  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+  const lines = text.split('\n').map((l) => normalizeWhitespace(l)).filter(Boolean);
+  const nonContactLines: string[] = [];
+
   for (const line of lines) {
     // Skip lines already captured as email/phone/url
     if (emails.some((e) => line.includes(e))) continue;
     if (phones.some((p) => line.includes(p))) continue;
     if (urls.some((u) => line.includes(u))) continue;
+
+    nonContactLines.push(line);
 
     const inferences = inferContentTypes(line);
     if (inferences.some((i) => i.type === 'address') && !card.address) {
@@ -420,6 +552,17 @@ function enrichCardFromPatterns(card: NormalizedCard, text: string): void {
     if (inferences.some((i) => i.type === 'social') && !card.social) {
       card.social = line;
       continue;
+    }
+  }
+
+  // Fill identity fields from unlabeled text blocks.
+  if ((!card.fullName || !card.company) && nonContactLines.length > 0) {
+    const identity = inferNameAndOrganizationFromContext(nonContactLines, 0);
+    if (!card.fullName && identity.fullName) {
+      card.fullName = identity.fullName;
+    }
+    if (!card.company && identity.organization) {
+      card.company = identity.organization;
     }
   }
 }
