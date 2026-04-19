@@ -74,6 +74,76 @@ export interface CardExtractionResult {
   confidence: number;
 }
 
+const SIGNIN_HEADER_ALIASES: Record<string, string[]> = {
+  fullName: ['full name', 'name', 'attendee', 'participant', 'person', 'contact'],
+  organization: ['organization', 'org', 'company', 'affiliation', 'agency', 'employer', 'group', 'institution'],
+  email: ['email', 'e-mail', 'email address', 'contact email'],
+  phone: ['phone', 'phone number', 'mobile', 'cell', 'telephone', 'tel'],
+  screening: ['screening', 'screened', 'waiver', 'agree', 'consent'],
+  shareInfo: ['share info', 'share information', 'share', 'sharing', 'opt in', 'newsletter'],
+  date: ['date', 'event date', 'sign date', 'signed date', 'attendance date'],
+  comments: ['comments', 'comment', 'notes', 'note', 'remarks', 'other', 'additional'],
+};
+
+function normalizeSigninHeaderValue(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function isRepeatedHeaderLikeSigninRow(
+  rawRow: Record<string, string>,
+  detectedHeaders: string[],
+  headerMapping: HeaderMapping[],
+): boolean {
+  const entries = Object.entries(rawRow);
+  if (entries.length === 0) return false;
+
+  const cells = entries.map(([, value]) => value.trim());
+  const nonEmptyCells = cells.filter(Boolean);
+  if (nonEmptyCells.length === 0) return false;
+
+  const normalizedHeaders = detectedHeaders.map((header) => normalizeSigninHeaderValue(header));
+  const headerMatches = cells.every((value, index) => {
+    const normalizedValue = normalizeSigninHeaderValue(value);
+    const normalizedHeader = normalizedHeaders[index] ?? '';
+    return !normalizedValue || !normalizedHeader || normalizedValue === normalizedHeader;
+  });
+
+  if (headerMatches) return true;
+
+  let labelLikeCount = 0;
+  entries.forEach(([key, value], index) => {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+
+    const normalizedValue = normalizeSigninHeaderValue(trimmed);
+    const normalizedHeader = normalizeSigninHeaderValue(detectedHeaders[index] ?? key);
+    if (normalizedHeader && normalizedValue === normalizedHeader) {
+      labelLikeCount += 1;
+      return;
+    }
+
+    const normalizedField = headerMapping[index]?.normalized;
+    const aliases = normalizedField ? SIGNIN_HEADER_ALIASES[normalizedField] ?? [] : [];
+    if (aliases.some((alias) => normalizeSigninHeaderValue(alias) === normalizedValue)) {
+      labelLikeCount += 1;
+      return;
+    }
+
+    const looksLikeAnyAlias = Object.values(SIGNIN_HEADER_ALIASES)
+      .flat()
+      .some((alias) => normalizeSigninHeaderValue(alias) === normalizedValue);
+    if (looksLikeAnyAlias) {
+      labelLikeCount += 1;
+    }
+  });
+
+  return labelLikeCount >= 2 && labelLikeCount >= Math.ceil(nonEmptyCells.length * 0.6);
+}
+
 // ── Sign-in sheet extraction ───────────────────────────────────────────────────
 
 /**
@@ -93,8 +163,11 @@ export function extractSigninSheet(parseResult: NormalizedParseResult): SigninEx
 
 function extractFromTable(analysis: StructureAnalysis): SigninExtractionResult {
   const headerMapping = buildSigninHeaderMap(analysis.detectedHeaders);
+  const filteredRawRows = analysis.rawRows.filter(
+    (rawRow) => !isRepeatedHeaderLikeSigninRow(rawRow, analysis.detectedHeaders, headerMapping),
+  );
 
-  const normalizedRows: NormalizedSigninRow[] = analysis.rawRows.map((rawRow) => {
+  const normalizedRows: NormalizedSigninRow[] = filteredRawRows.map((rawRow) => {
     const normalized: NormalizedSigninRow = {
       id: crypto.randomUUID(),
       fullName: '',
@@ -132,7 +205,7 @@ function extractFromTable(analysis: StructureAnalysis): SigninExtractionResult {
     detectedHeaders: analysis.detectedHeaders,
     headerMapping,
     normalizedRows,
-    rawRows: analysis.rawRows,
+    rawRows: filteredRawRows,
     confidence,
   };
 }

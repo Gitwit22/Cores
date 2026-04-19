@@ -1,3 +1,4 @@
+import { describe, it, expect } from '@jest/globals';
 import { extractSigninSheet, extractBusinessCard } from '../core/document-intelligence/dynamicExtractor';
 import type { NormalizedParseResult } from '../core/document-intelligence/types';
 
@@ -73,6 +74,24 @@ describe('dynamicExtractor', () => {
       const result = extractSigninSheet(makeParse(markdown));
       expect(result.normalizedRows[0].screening).toBe('Yes');
       expect(result.normalizedRows[0].shareInfo).toBe('Yes');
+    });
+
+    it('drops repeated header rows that appear in the table body', () => {
+      const markdown = [
+        '| Full Name | Organization | Email | Phone | Screening | Share Info | Date | Comments |',
+        '| --- | --- | --- | --- | --- | --- | --- | --- |',
+        '| Full Name | Organization | Email | Phone | Screening | Share Info | Date | Comments |',
+        '| Alice Smith | NLSM | alice@test.com | 555-0001 | Yes | Yes | 2026-04-19 | Checked in |',
+      ].join('\n');
+
+      const result = extractSigninSheet(makeParse(markdown));
+
+      expect(result.normalizedRows).toHaveLength(1);
+      expect(result.normalizedRows[0].fullName).toBe('Alice Smith');
+      expect(result.normalizedRows[0].organization).toBe('NLSM');
+      expect(result.normalizedRows[0].email).toBe('alice@test.com');
+      expect(result.normalizedRows[0].phone).toBe('555-0001');
+      expect(result.rawRows).toHaveLength(1);
     });
 
     it('does not collapse a multi-row table into one entry', () => {
