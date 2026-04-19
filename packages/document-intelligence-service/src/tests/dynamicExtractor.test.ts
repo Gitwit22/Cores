@@ -165,6 +165,22 @@ describe('dynamicExtractor', () => {
       expect(result.normalizedRows[1].fullName).toBe('Taylor Reed');
       expect(result.normalizedRows[1].organization).toBe('NLSM');
     });
+
+    it('extracts names from noisy unstructured lines with org chains', () => {
+      const text = [
+        'tequeria Barrett VAAC/MLCV/NAACP tqbarrett93@gmail.com (734) 578-7073',
+        'kay bines MLCV kaybines71@gmail.com 313-244-5212',
+      ].join('\n');
+
+      const result = extractSigninSheet(makeParse(text, ''));
+
+      expect(result.structure).toBe('unstructured');
+      expect(result.normalizedRows).toHaveLength(2);
+      expect(result.normalizedRows[0].fullName.length).toBeGreaterThan(0);
+      expect(result.normalizedRows[1].fullName.length).toBeGreaterThan(0);
+      expect(result.normalizedRows[0].email).toContain('@');
+      expect(result.normalizedRows[1].email).toContain('@');
+    });
   });
 
   // ── Business card ──────────────────────────────────────────────────────────

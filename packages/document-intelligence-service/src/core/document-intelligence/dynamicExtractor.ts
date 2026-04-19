@@ -111,9 +111,34 @@ function isLikelyPersonName(value: string): boolean {
 
   // Accept standard proper-name tokens and short initial-like tokens.
   const validTokenCount = tokens.filter(
-    (token) => /^[A-Z][a-z'\-.]+$/.test(token) || /^[A-Z]{1,2}\.?$/.test(token),
+    (token) => /^[A-Za-z][A-Za-z'\-.]+$/.test(token) || /^[A-Z]{1,2}\.?$/.test(token),
   ).length;
   return validTokenCount >= Math.max(2, tokens.length - 1);
+}
+
+function extractLikelyNameFromFragment(value: string): string {
+  const trimmed = normalizeWhitespace(value);
+  if (!trimmed) return '';
+
+  // Remove trailing acronym chains like "VAAC/MLCV/NAACP".
+  const withoutOrgChain = normalizeWhitespace(
+    trimmed.replace(/\b([A-Z]{2,8})(?:\s*\/\s*[A-Z]{2,8})+\b/g, ' '),
+  );
+  const stripped = normalizeWhitespace(withoutOrgChain.replace(/[|,;:/]+/g, ' '));
+  const tokens = stripped.split(' ').filter(Boolean);
+  if (tokens.length < 2) return '';
+
+  const candidateTokens: string[] = [];
+  for (const token of tokens) {
+    if (/^[A-Z]{2,8}$/.test(token)) break;
+    if (NOISE_NAME_WORD_RE.test(token)) break;
+    if (!/^[A-Za-z][A-Za-z'\-.]*$/.test(token)) break;
+    candidateTokens.push(token);
+    if (candidateTokens.length >= 3) break;
+  }
+
+  const candidate = normalizeWhitespace(candidateTokens.join(' '));
+  return isLikelyPersonName(candidate) ? candidate : '';
 }
 
 function isLikelyOrganizationName(value: string): boolean {
@@ -165,7 +190,7 @@ function inferNameAndOrganizationFromContext(lines: string[], anchorIndex: numbe
     if (!stripped) continue;
 
     const parts = stripped
-      .split(/\s{2,}|\||,|;/)
+      .split(/\s{2,}|\||,|;|\//)
       .map((part) => normalizeWhitespace(part))
       .filter(Boolean);
 
@@ -190,6 +215,15 @@ function inferNameAndOrganizationFromContext(lines: string[], anchorIndex: numbe
         fullName = fragment;
         continue;
       }
+
+      if (!fullName) {
+        const extractedName = extractLikelyNameFromFragment(fragment);
+        if (extractedName) {
+          fullName = extractedName;
+          continue;
+        }
+      }
+
       const fragmentLooksLikeOrgAcronym = /^[A-Z]{2,8}$/.test(fragment);
       const fragmentHasOrgWord = COMMON_ORG_WORD_RE.test(fragment);
       const fragmentLooksLikePerson = isLikelyPersonName(fragment);
