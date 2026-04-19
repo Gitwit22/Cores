@@ -166,6 +166,57 @@ describe('dynamicExtractor', () => {
       expect(result.normalizedRows[1].organization).toBe('NLSM');
     });
 
+    it('preserves Name and Organization when grouped HTML subheaders omit leading blank cells', () => {
+      const htmlTable = [
+        '<table>',
+        '  <thead>',
+        '    <tr>',
+        '      <th>Name</th>',
+        '      <th>Organization</th>',
+        '      <th colspan="2">Contact Info we can reach you at</th>',
+        '      <th colspan="2">Check for Yes</th>',
+        '    </tr>',
+        '    <tr>',
+        '      <th>Email</th>',
+        '      <th>Phone</th>',
+        '      <th>Screening</th>',
+        '      <th>Share Info</th>',
+        '    </tr>',
+        '  </thead>',
+        '  <tbody>',
+        '    <tr>',
+        '      <td>Lydia McCullagh</td>',
+        '      <td>NLSM</td>',
+        '      <td>LMcCullagh@wcnls.org</td>',
+        '      <td>313 719-0973</td>',
+        '      <td></td>',
+        '      <td></td>',
+        '    </tr>',
+        '  </tbody>',
+        '</table>',
+      ].join('\n');
+
+      const result = extractSigninSheet(makeParse(htmlTable, htmlTable));
+
+      expect(result.structure).toBe('table');
+      expect(result.detectedHeaders).toEqual(['Name', 'Organization', 'Email', 'Phone', 'Screening', 'Share Info']);
+      expect(result.rawRows).toHaveLength(1);
+      expect(result.rawRows[0]).toEqual({
+        Name: 'Lydia McCullagh',
+        Organization: 'NLSM',
+        Email: 'LMcCullagh@wcnls.org',
+        Phone: '313 719-0973',
+        Screening: '',
+        'Share Info': '',
+      });
+
+      expect(result.normalizedRows).toHaveLength(1);
+      expect(result.normalizedRows[0].fullName).toBe('Lydia McCullagh');
+      expect(result.normalizedRows[0].organization).toBe('NLSM');
+      expect(result.normalizedRows[0].email).toBe('LMcCullagh@wcnls.org');
+      expect(result.normalizedRows[0].phone).toBe('313 719-0973');
+    });
+
     it('extracts names from noisy unstructured lines with org chains', () => {
       const text = [
         'tequeria Barrett VAAC/MLCV/NAACP tqbarrett93@gmail.com (734) 578-7073',

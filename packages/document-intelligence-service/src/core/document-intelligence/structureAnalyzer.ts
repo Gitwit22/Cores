@@ -219,7 +219,41 @@ function flattenStackedHeaderCell(parentHeader: string, childHeader: string): st
 }
 
 function flattenStackedHeaders(parentHeaders: string[], childHeaders: string[]): string[] {
-  return parentHeaders.map((parent, index) => flattenStackedHeaderCell(parent, childHeaders[index] ?? ''));
+  if (childHeaders.length >= parentHeaders.length) {
+    return parentHeaders.map((parent, index) => flattenStackedHeaderCell(parent, childHeaders[index] ?? ''));
+  }
+
+  // When grouped headers omit blank leading cells in subheader row, preserve
+  // non-group parent columns and consume child headers only for repeated groups.
+  const normalizedParents = parentHeaders.map((header) => normalizeToken(header));
+  const parentCounts = normalizedParents.reduce<Record<string, number>>((acc, token) => {
+    if (!token) return acc;
+    acc[token] = (acc[token] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  const groupedColumnIndexes = normalizedParents
+    .map((token, index) => ({ token, index }))
+    .filter(({ token }) => Boolean(token) && (parentCounts[token] ?? 0) > 1)
+    .map(({ index }) => index);
+
+  // If we don't have repeated parent groups, fallback to index-based flattening.
+  if (groupedColumnIndexes.length === 0) {
+    return parentHeaders.map((parent, index) => flattenStackedHeaderCell(parent, childHeaders[index] ?? ''));
+  }
+
+  const flattened = [...parentHeaders];
+  let childCursor = 0;
+
+  groupedColumnIndexes.forEach((parentIndex) => {
+    const child = childHeaders[childCursor] ?? '';
+    flattened[parentIndex] = flattenStackedHeaderCell(parentHeaders[parentIndex], child);
+    if (childCursor < childHeaders.length) {
+      childCursor += 1;
+    }
+  });
+
+  return flattened;
 }
 
 function looksLikeSeparatorLine(line: string): boolean {
