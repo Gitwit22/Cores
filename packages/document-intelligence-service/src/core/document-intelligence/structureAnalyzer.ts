@@ -39,6 +39,8 @@ const SIGNIN_TEXT_HEADER_ALIASES: Record<string, string[]> = {
   comments: ['comments', 'comment', 'notes', 'remarks'],
 };
 
+const PHONE_LIKE_RE = /(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/;
+
 function normalizeToken(value: string): string {
   return value
     .toLowerCase()
@@ -54,8 +56,7 @@ function splitAlignedColumns(line: string): string[] {
   if (trimmed.includes('|')) {
     return trimmed
       .split('|')
-      .map((cell) => cell.trim())
-      .filter(Boolean);
+      .map((cell) => cell.trim());
   }
 
   return trimmed
@@ -71,6 +72,44 @@ function looksLikeKnownSigninHeader(cell: string): boolean {
   return Object.values(SIGNIN_TEXT_HEADER_ALIASES)
     .flat()
     .some((alias) => normalizeToken(alias) === normalized);
+}
+
+function isLikelyDataCell(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  if (trimmed.includes('@')) return true;
+  if (PHONE_LIKE_RE.test(trimmed)) return true;
+  // Long values are usually row content, not subheaders.
+  if (trimmed.length > 28) return true;
+  return false;
+}
+
+function isLikelyStackedHeaderRow(cells: string[]): boolean {
+  const nonEmpty = cells.filter((cell) => cell.trim().length > 0);
+  if (nonEmpty.length === 0) return false;
+
+  const knownHeaderCount = nonEmpty.filter((cell) => looksLikeKnownSigninHeader(cell)).length;
+  const dataLikeCount = nonEmpty.filter((cell) => isLikelyDataCell(cell)).length;
+
+  return knownHeaderCount >= 2 && knownHeaderCount >= Math.ceil(nonEmpty.length * 0.5) && dataLikeCount === 0;
+}
+
+function flattenStackedHeaderCell(parentHeader: string, childHeader: string): string {
+  const parent = parentHeader.trim();
+  const child = childHeader.trim();
+
+  if (!child) return parent;
+  if (!parent) return child;
+  if (normalizeToken(parent) === normalizeToken(child)) return child;
+
+  // If child is a known field, use it as canonical column label.
+  if (looksLikeKnownSigninHeader(child)) return child;
+
+  return `${parent}: ${child}`;
+}
+
+function flattenStackedHeaders(parentHeaders: string[], childHeaders: string[]): string[] {
+  return parentHeaders.map((parent, index) => flattenStackedHeaderCell(parent, childHeaders[index] ?? ''));
 }
 
 function looksLikeSeparatorLine(line: string): boolean {
@@ -89,7 +128,18 @@ function extractAlignedTextTable(content: string): { headers: string[]; rows: Ar
     const recognizedHeaders = headerCells.filter((cell) => looksLikeKnownSigninHeader(cell)).length;
     if (recognizedHeaders < 2) continue;
 
+    let activeHeaders = [...headerCells];
     let cursor = i + 1;
+
+    const potentialSubheaderCells = cursor < lines.length ? splitAlignedColumns(lines[cursor]) : [];
+    if (
+      potentialSubheaderCells.length >= Math.min(2, activeHeaders.length)
+      && isLikelyStackedHeaderRow(potentialSubheaderCells)
+    ) {
+      activeHeaders = flattenStackedHeaders(activeHeaders, potentialSubheaderCells);
+      cursor += 1;
+    }
+
     if (cursor < lines.length && looksLikeSeparatorLine(lines[cursor])) {
       cursor += 1;
     }
@@ -100,8 +150,8 @@ function extractAlignedTextTable(content: string): { headers: string[]; rows: Ar
       if (cells.length < Math.min(2, headerCells.length)) break;
 
       const row: Record<string, string> = {};
-      for (let col = 0; col < headerCells.length; col++) {
-        row[headerCells[col]] = cells[col] ?? '';
+      for (let col = 0; col < activeHeaders.length; col++) {
+        row[activeHeaders[col]] = cells[col] ?? '';
       }
 
       const hasContent = Object.values(row).some((value) => value.trim().length > 0);
@@ -112,7 +162,7 @@ function extractAlignedTextTable(content: string): { headers: string[]; rows: Ar
     }
 
     if (rows.length > 0) {
-      return { headers: headerCells, rows };
+      return { headers: activeHeaders, rows };
     }
   }
 
@@ -179,18 +229,36 @@ function extractMarkdownTables(
     const headerMatch = TABLE_ROW_RE.exec(lines[i]);
     if (headerMatch && i + 1 < lines.length && SEPARATOR_RE.test(lines[i + 1])) {
       // Found a table header + separator
-      const rawHeaders = headerMatch[1].split('|').map((h) => h.trim()).filter(Boolean);
-      if (rawHeaders.length === 0) {
+      const rawHeaders = headerMatch[1].split('|').map((h) => h.trim());
+      const nonEmptyHeaderCount = rawHeaders.filter((h) => h.length > 0).length;
+      if (nonEmptyHeaderCount === 0) {
         i++;
         continue;
       }
 
+      let activeHeaders = [...rawHeaders];
+
       // Use first table found
       if (headers.length === 0) {
-        headers.push(...rawHeaders);
+        headers.push(...activeHeaders);
       }
 
       i += 2; // skip header + separator
+
+      const potentialSubheaderMatch = i < lines.length ? TABLE_ROW_RE.exec(lines[i]) : null;
+      if (potentialSubheaderMatch) {
+        const potentialSubheaders = potentialSubheaderMatch[1].split('|').map((h) => h.trim());
+        if (
+          potentialSubheaders.length >= Math.min(2, activeHeaders.length)
+          && isLikelyStackedHeaderRow(potentialSubheaders)
+        ) {
+          activeHeaders = flattenStackedHeaders(activeHeaders, potentialSubheaders);
+          if (headers.length > 0) {
+            headers.splice(0, headers.length, ...activeHeaders);
+          }
+          i += 1;
+        }
+      }
 
       // Parse data rows
       while (i < lines.length) {
@@ -199,8 +267,8 @@ function extractMarkdownTables(
 
         const cells = rowMatch[1].split('|').map((c) => c.trim());
         const row: Record<string, string> = {};
-        for (let col = 0; col < headers.length; col++) {
-          row[headers[col]] = cells[col] ?? '';
+        for (let col = 0; col < activeHeaders.length; col++) {
+          row[activeHeaders[col]] = cells[col] ?? '';
         }
 
         // Skip rows that are completely empty

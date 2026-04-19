@@ -61,6 +61,36 @@ describe('structureAnalyzer', () => {
       const result = analyzeStructure(markdown, markdown);
       expect(result.rawRows).toHaveLength(2);
     });
+
+    it('flattens grouped two-row headers into canonical field headers', () => {
+      const markdown = [
+        '| Name | Organization | Contact Info we can reach you at |  | Check for Yes |  |',
+        '| --- | --- | --- | --- | --- | --- |',
+        '|  |  | Email | Phone | Screening | Share Info |',
+        '| Lydia Mccullough | NLSM | lmccullough@wcns.org | 313-719-0973 |  |  |',
+      ].join('\n');
+
+      const result = analyzeStructure(markdown, markdown);
+
+      expect(result.structure).toBe('table');
+      expect(result.detectedHeaders).toEqual([
+        'Name',
+        'Organization',
+        'Email',
+        'Phone',
+        'Screening',
+        'Share Info',
+      ]);
+      expect(result.rawRows).toHaveLength(1);
+      expect(result.rawRows[0]).toEqual({
+        Name: 'Lydia Mccullough',
+        Organization: 'NLSM',
+        Email: 'lmccullough@wcns.org',
+        Phone: '313-719-0973',
+        Screening: '',
+        'Share Info': '',
+      });
+    });
   });
 
   describe('analyzeStructure — single entity detection', () => {
