@@ -58,7 +58,7 @@ export class CreatePortalSessionUseCase {
     if (!this.config.portalEnabled) {
       return {
         success: false,
-        error: createBillingError(BillingErrorCode.BILLING_DISABLED, 'Portal is not enabled.'),
+        error: createBillingError(BillingErrorCode.PORTAL_DISABLED, 'Portal is not enabled.'),
       };
     }
 

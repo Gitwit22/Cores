@@ -54,7 +54,7 @@ export class CreateCheckoutSessionUseCase {
       return {
         success: false,
         error: createBillingError(
-          BillingErrorCode.BILLING_DISABLED,
+          BillingErrorCode.CHECKOUT_DISABLED,
           'Checkout is not enabled.',
         ),
       };
@@ -82,7 +82,7 @@ export class CreateCheckoutSessionUseCase {
       requirePaymentMethod: input.requirePaymentMethod,
       metadata: {
         organizationId: input.organizationId,
-        userId: input.userId,
+        ...(input.userId !== undefined && { userId: input.userId }),
         programKey: input.programKey,
       },
     });
