@@ -10,6 +10,7 @@
     "build": "tsc --build",
     "build:auth-core": "tsc --build packages/auth-core",
     "build:ticket-core": "tsc --build packages/ticket-core",
+    "build:billing-core": "tsc --build packages/billing-core",
     "build:shared": "tsc --build packages/shared",
     "build:document-intelligence-core": "tsc --build packages/document-intelligence-core",
     "build:document-intelligence-service": "tsc --build packages/document-intelligence-service",
