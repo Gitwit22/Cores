@@ -33,7 +33,6 @@ export interface CreatePortalSessionUseCaseDependencies {
 }
 
 export class CreatePortalSessionUseCase {
-  private readonly repository: BillingRepository;
   private readonly portalService: PortalService;
   private readonly auditLogger: BillingAuditLogger;
   private readonly config: BillingConfig;
@@ -41,7 +40,6 @@ export class CreatePortalSessionUseCase {
   private readonly now: () => Date;
 
   constructor(deps: CreatePortalSessionUseCaseDependencies) {
-    this.repository = deps.repository;
     this.portalService = deps.portalService;
     this.auditLogger = deps.auditLogger;
     this.config = deps.config;
@@ -70,6 +68,7 @@ export class CreatePortalSessionUseCase {
       input.returnUrl,
     );
 
+    // TODO: attach traceId to audit log once tracing infrastructure is in place
     const _traceId = this.createId();
     void _traceId;
 

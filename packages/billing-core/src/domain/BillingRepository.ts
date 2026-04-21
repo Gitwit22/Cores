@@ -55,7 +55,11 @@ export interface BillingRepository {
 
   // checkout sessions
   createCheckoutSession(
-    input: CreateBillingCheckoutSessionInput & { stripeSessionId: string; stripePriceId: string },
+    input: CreateBillingCheckoutSessionInput & {
+      stripeSessionId: string;
+      stripePriceId: string;
+      stripeCustomerId?: string;
+    },
   ): Promise<BillingCheckoutSession>;
   findCheckoutSessionByStripeId(stripeSessionId: string): Promise<BillingCheckoutSession | undefined>;
   updateCheckoutSessionStatus(

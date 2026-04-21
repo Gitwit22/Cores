@@ -1,5 +1,5 @@
 /**
- * BillingConfig controls billing feature flags and behaviour.
+ * BillingConfig controls billing feature flags and behavior.
  * All enforcement flags default to false so billing can be built
  * without affecting existing programs.
  */

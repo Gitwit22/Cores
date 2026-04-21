@@ -95,6 +95,7 @@ export class CreateCheckoutSessionUseCase {
       metadata: input.metadata ?? {},
     });
 
+    // TODO: attach traceId to audit log once tracing infrastructure is in place
     const _traceId = this.createId();
     void _traceId;
 
