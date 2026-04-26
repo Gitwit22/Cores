@@ -14,6 +14,7 @@ import {
   type SendEmailInput,
   type SendEmailResult,
 } from '../domain/types.js';
+import { validateSendEmailInput } from '../domain/validation.js';
 
 export interface SendEmailUseCaseDependencies {
   provider: EmailProvider;
@@ -64,6 +65,25 @@ export class SendEmailUseCase {
         input: this.stripBody(input),
         result,
         message: 'Email send skipped: sending is disabled.',
+      });
+
+      return result;
+    }
+
+    // ------------------------------------------------------------------
+    // Guard: invalid input
+    // ------------------------------------------------------------------
+    const validationError = validateSendEmailInput(input);
+    if (validationError) {
+      const result: SendEmailResult = { success: false, error: validationError };
+
+      this.logger?.log({
+        action: 'notification.email.failed',
+        level: 'error',
+        occurredAt,
+        input: this.stripBody(input),
+        result,
+        message: `Email send failed: invalid input — ${validationError.message}`,
       });
 
       return result;
