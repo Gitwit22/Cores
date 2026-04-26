@@ -16,11 +16,12 @@ This package is intentionally decoupled from any specific program (StreamLine, C
 
 ## Package Layout
 
-- `src/domain` — business-facing types and contracts (`SendEmailInput`, `EmailProvider`, `EmailLogger`)
+- `src/domain` — business-facing types, contracts, and validation (`SendEmailInput`, `EmailProvider`, `EmailLogger`, `validateSendEmailInput`)
 - `src/config` — environment configuration loader (`loadNotificationConfig`)
 - `src/application` — use-case orchestration (`SendEmailUseCase`)
 - `src/infrastructure/resend` — concrete Resend SDK adapter (`ResendEmailProvider`)
-- `tests` — unit tests for application use cases
+- `src/infrastructure/console` — console-based logger adapter (`ConsoleEmailLogger`)
+- `tests` — unit tests for application use cases, validation, and infrastructure adapters
 
 ## Environment Variables
 
@@ -41,17 +42,27 @@ import {
   loadNotificationConfig,
   ResendEmailProvider,
   SendEmailUseCase,
+  ConsoleEmailLogger,
 } from '@nxtlvl/notification-core';
 
 const config = loadNotificationConfig();
 const provider = new ResendEmailProvider(config);
-const emailService = new SendEmailUseCase({ provider, config });
+const logger = new ConsoleEmailLogger(config.logLevel);
+const emailService = new SendEmailUseCase({ provider, config, logger });
 
 const result = await emailService.execute({
   to: 'recipient@example.com',
   subject: 'Welcome!',
   html: '<p>Thanks for joining.</p>',
 });
+```
+
+### Expected sender
+
+Set `EMAIL_FROM` to your verified Resend sender identity, e.g.:
+
+```
+EMAIL_FROM="Nxt Lvl Support <support@nxtlvl.io>"
 ```
 
 ## Key Exports
@@ -63,11 +74,13 @@ const result = await emailService.execute({
 - `EmailProvider` — interface for pluggable delivery providers
 - `EmailLogger` — interface for log-event sinks
 - `ResendEmailProvider` — Resend SDK adapter (infrastructure)
+- `ConsoleEmailLogger` — structured console logger adapter (infrastructure)
 - `SendEmailUseCase` — orchestration use case (application)
+- `isValidEmailAddress` — single-address format check (domain utility)
+- `validateSendEmailInput` — full input validation returning `NotificationError | undefined`
 
 ## Next Implementation Work
 
 1. Add template rendering support (HTML templates via keys).
-2. Add a concrete `ConsoleEmailLogger` adapter in `infrastructure/`.
-3. Introduce per-program `EmailLogger` adapters that forward to `audit-core`.
-4. Expand `SendEmailInput` with attachment support once provider confirms limits.
+2. Introduce per-program `EmailLogger` adapters that forward to `audit-core`.
+3. Expand `SendEmailInput` with attachment support once provider confirms limits.
