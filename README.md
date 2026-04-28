@@ -14,6 +14,8 @@ It is not a single product or app. This repository holds modular core packages t
 ## Monorepo Structure
 
 - `packages/auth-core` contains the first implemented core package for login and account access workflows.
+- `packages/document-core` contains source-of-truth document vault contracts.
+- `packages/attachment-core` contains universal document attachment/link contracts.
 - `packages/storage-core` is reserved for reusable storage abstractions.
 - `packages/invite-core` is reserved for invite issuance and acceptance flows.
 - `packages/audit-core` is reserved for audit event abstractions.

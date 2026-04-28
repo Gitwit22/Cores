@@ -3,6 +3,8 @@
   "references": [
     { "path": "./packages/shared" },
     { "path": "./packages/auth-core" },
+    { "path": "./packages/document-core" },
+    { "path": "./packages/attachment-core" },
     { "path": "./packages/storage-core" },
     { "path": "./packages/invite-core" },
     { "path": "./packages/audit-core" },
