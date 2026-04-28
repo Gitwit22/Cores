@@ -10,6 +10,7 @@
     { "path": "./packages/audit-core" },
     { "path": "./packages/ticket-core" },
     { "path": "./packages/ui-core" },
-    { "path": "./packages/document-intelligence-service" }
+    { "path": "./packages/document-intelligence-service" },
+    { "path": "./packages/notification-core" }
   ]
 }
